@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard | ระบบจัดการเวลา</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        body {
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        /* จุดสีสถานะบนรูปโปรไฟล์ */
+        .status-dot {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+        }
+
+        .dot-green {
+            background-color: #22c55e;
+        }
+
+        /* เข้างาน */
+        .dot-red {
+            background-color: #ef4444;
+        }
+
+        /* ออกงาน */
+        .dot-yellow {
+            background-color: #f59e0b;
+        }
+
+        /* ระหว่างวัน */
+        .dot-gray {
+            background-color: #94a3b8;
+        }
+
+        /* ซ่อน Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            rounded-lg;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 p-4 sm:p-6 min-h-screen flex flex-col">
+
+    <div class="container mx-auto max-w-[1400px] flex-1">
+
+        <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800">แดชบอร์ดจัดการเวลา 🕖</h1>
+                <p class="text-sm text-slate-500 mt-1">ตรวจสอบและส่งออกข้อมูลการลงเวลาของสมาชิก</p>
+            </div>
+            <a href="member.html"
+                class="w-full sm:w-auto text-center py-2.5 px-6 rounded-xl bg-slate-800 text-white font-semibold hover:bg-slate-900 transition shadow-sm">
+                <i class="fas fa-users mr-2"></i> จัดการสมาชิก
+            </a>
+        </div>
+
+        <div class="flex flex-col xl:flex-row gap-6">
+
+            <div class="xl:w-80 bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex-shrink-0 h-fit">
+
+                <h2 class="font-bold text-lg mb-4 flex items-center"><i class="fas fa-filter text-slate-400 mr-2"></i>
+                    ตัวกรองข้อมูล</h2>
+
+                <div class="space-y-3 mb-5">
+                    <div>
+                        <input id="filterSearch" type="text"
+                            class="w-full rounded-xl border border-slate-300 p-2.5 text-sm focus:border-slate-800 focus:ring-1 focus:ring-slate-800 outline-none"
+                            placeholder="ค้นหาชื่อ หรือ รหัสนิสิต..." />
+                    </div>
+                </div>
+
+                <div class="mb-5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">สถานะ</label>
+                    <div class="flex flex-col space-y-2 text-sm">
+                        <label class="inline-flex items-center cursor-pointer"><input id="filterIn" type="checkbox"
+                                value="เข้างาน" checked
+                                class="rounded text-emerald-500 focus:ring-emerald-500 w-4 h-4 cursor-pointer" /> <span
+                                class="ml-2">เข้างาน</span></label>
+                        <label class="inline-flex items-center cursor-pointer"><input id="filterDuring" type="checkbox"
+                                value="ระหว่างวัน" checked
+                                class="rounded text-amber-500 focus:ring-amber-500 w-4 h-4 cursor-pointer" /> <span
+                                class="ml-2">ระหว่างวัน</span></label>
+                        <label class="inline-flex items-center cursor-pointer"><input id="filterOut" type="checkbox"
+                                value="ออกงาน" checked
+                                class="rounded text-rose-500 focus:ring-rose-500 w-4 h-4 cursor-pointer" /> <span
+                                class="ml-2">ออกงาน</span></label>
+                    </div>
+                </div>
+
+                <div class="mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider">ช่วงเวลา</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div><label class="text-xs text-slate-500">เริ่มวันที่</label><input id="startDate" type="date"
+                                class="w-full rounded-lg border border-slate-300 p-2 text-xs outline-none" /></div>
+                        <div><label class="text-xs text-slate-500">ถึงวันที่</label><input id="endDate" type="date"
+                                class="w-full rounded-lg border border-slate-300 p-2 text-xs outline-none" /></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <div><label class="text-xs text-slate-500">เวลาเริ่ม</label><input id="startTime" type="time"
+                                class="w-full rounded-lg border border-slate-300 p-2 text-xs outline-none" /></div>
+                        <div><label class="text-xs text-slate-500">เวลาสิ้นสุด</label><input id="endTime" type="time"
+                                class="w-full rounded-lg border border-slate-300 p-2 text-xs outline-none" /></div>
+                    </div>
+                </div>
+
+                <hr class="my-5 border-slate-200">
+
+                <h2 class="font-bold text-lg mb-4 flex items-center"><i
+                        class="fas fa-file-export text-slate-400 mr-2"></i> ส่งออกข้อมูล</h2>
+
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">เลือกคอลัมน์
+                        (CSV/TXT)</label>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <label class="inline-flex items-center"><input id="colImage" type="checkbox"
+                                class="rounded text-slate-800" /> <span class="ml-1.5">รูปภาพ</span></label>
+                        <label class="inline-flex items-center"><input id="colEmployeeId" type="checkbox" checked
+                                class="rounded text-slate-800" /> <span class="ml-1.5">รหัสนิสิต</span></label>
+                        <label class="inline-flex items-center"><input id="colName" type="checkbox" checked
+                                class="rounded text-slate-800" /> <span class="ml-1.5">ชื่อ</span></label>
+                        <label class="inline-flex items-center"><input id="colStatus" type="checkbox" checked
+                                class="rounded text-slate-800" /> <span class="ml-1.5">สถานะ</span></label>
+                        <label class="inline-flex items-center"><input id="colNote" type="checkbox" checked
+                                class="rounded text-slate-800" /> <span class="ml-1.5">หมายเหตุ</span></label>
+                        <label class="inline-flex items-center"><input id="colDate" type="checkbox" checked
+                                class="rounded text-slate-800" /> <span class="ml-1.5">วันที่</span></label>
+                        <label class="inline-flex items-center"><input id="colTime" type="checkbox" checked
+                                class="rounded text-slate-800" /> <span class="ml-1.5">เวลา</span></label>
+                        <label class="inline-flex items-center"><input id="colLocation" type="checkbox"
+                                class="rounded text-slate-800" /> <span class="ml-1.5">สถานที่</span></label>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <button id="exportCsvBtn"
+                        class="w-full py-2.5 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 font-semibold text-sm transition flex justify-center items-center">
+                        <i class="fas fa-file-csv mr-2"></i> ส่งออก .CSV
+                    </button>
+                    <button id="exportTxtBtn"
+                        class="w-full py-2.5 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 font-semibold text-sm transition flex justify-center items-center">
+                        <i class="fas fa-file-alt mr-2"></i> ส่งออก .TXT
+                    </button>
+                    <button id="exportTxtCustomBtn"
+                        class="w-full py-2.5 rounded-xl bg-slate-800 text-white hover:bg-slate-900 font-semibold text-sm transition flex justify-center items-center">
+                        <i class="fas fa-server mr-2"></i> ออก TXT (นำเข้าเครื่อง)
+                    </button>
+                </div>
+
+            </div>
+
+            <div class="flex-1 flex flex-col min-w-0">
+                <div
+                    class="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
+
+                    <div
+                        class="p-4 border-b border-slate-100 flex flex-wrap justify-between items-center gap-3 bg-slate-50/50">
+                        <div class="flex bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+                            <button id="sortDescBtn"
+                                class="px-4 py-2 text-sm font-semibold bg-slate-100 text-slate-800 hover:bg-slate-200 transition">ล่าสุด</button>
+                            <div class="w-px bg-slate-200"></div>
+                            <button id="sortAscBtn"
+                                class="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">เก่าสุด</button>
+                        </div>
+                        <select id="rowsPerPage"
+                            class="rounded-lg border border-slate-200 p-2 text-sm outline-none bg-white shadow-sm focus:border-slate-400">
+                            <option value="15">แสดง 15 แถว</option>
+                            <option value="50">แสดง 50 แถว</option>
+                            <option value="100">แสดง 100 แถว</option>
+                        </select>
+                    </div>
+
+                    <div class="overflow-x-auto flex-1">
+                        <table class="min-w-full divide-y divide-slate-200 text-left">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-xs font-bold text-slate-500 uppercase w-16 text-center">
+                                        รูป</th>
+                                    <th class="px-4 py-3 text-xs font-bold text-slate-500 uppercase min-w-[150px]">
+                                        พนักงาน</th>
+                                    <th
+                                        class="px-4 py-3 text-xs font-bold text-slate-500 uppercase hidden sm:table-cell">
+                                        สถานะ</th>
+                                    <th
+                                        class="px-4 py-3 text-xs font-bold text-slate-500 uppercase hidden md:table-cell">
+                                        วัน/เวลา</th>
+                                    <th
+                                        class="px-4 py-3 text-xs font-bold text-slate-500 uppercase hidden lg:table-cell">
+                                        หมายเหตุ</th>
+                                    <th class="px-4 py-3 text-xs font-bold text-slate-500 uppercase text-center w-24">
+                                        รายละเอียด</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dataList" class="bg-white divide-y divide-slate-100 text-sm">
+                                <tr>
+                                    <td colspan="6" class="text-center py-12 text-slate-400">
+                                        <i
+                                            class="fas fa-spinner fa-spin fa-2x mb-3 text-slate-300"></i><br>กำลังโหลดข้อมูล...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div
+                        class="p-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50">
+                        <div id="rowsInfo" class="text-xs text-slate-500 font-medium">กำลังโหลด...</div>
+                        <div class="flex gap-2">
+                            <button id="prevPageBtn"
+                                class="bg-white border border-slate-200 text-slate-700 py-1.5 px-3 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition text-sm font-semibold">ก่อนหน้า</button>
+                            <button id="nextPageBtn"
+                                class="bg-white border border-slate-200 text-slate-700 py-1.5 px-3 rounded-lg hover:bg-slate-50 disabled:opacity-50 transition text-sm font-semibold">ถัดไป</button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="popupModal"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden transform scale-95 transition-transform duration-300"
+            id="popupContent">
+
+            <div class="relative bg-slate-800 h-24">
+                <button id="closePopup"
+                    class="absolute top-3 right-3 text-white/70 hover:text-white bg-black/20 hover:bg-black/40 rounded-full w-8 h-8 flex items-center justify-center transition">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="px-6 pb-6 relative pt-0">
+                <div class="flex justify-center -mt-12 mb-3">
+                    <img id="modalImg" src=""
+                        class="h-24 w-24 rounded-full object-cover border-4 border-white shadow-md bg-white">
+                </div>
+                <div class="text-center mb-5">
+                    <h3 id="modalName" class="text-xl font-bold text-slate-800">ชื่อพนักงาน</h3>
+                    <p id="modalId" class="text-sm text-slate-500">รหัส: 00000</p>
+                </div>
+
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                        <span class="text-slate-500"><i class="fas fa-tag w-5"></i> สถานะ</span>
+                        <span id="modalStatus" class="font-bold px-2.5 py-1 rounded-full text-xs">สถานะ</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                        <span class="text-slate-500"><i class="far fa-calendar w-5"></i> วันที่เวลา</span>
+                        <span id="modalDateTime" class="font-semibold text-slate-800">01/01/2024 08:00</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                        <span class="text-slate-500"><i class="fas fa-hourglass-half w-5"></i> ความล่าช้า</span>
+                        <span id="modalDelay" class="font-semibold text-slate-800">-</span>
+                    </div>
+                    <div class="flex flex-col py-2 border-b border-slate-100">
+                        <span class="text-slate-500 mb-1"><i class="fas fa-map-marker-alt w-5"></i> สถานที่</span>
+                        <span id="modalLocation"
+                            class="font-medium text-slate-700 text-xs leading-relaxed">กำลังโหลดพิกัด...</span>
+                    </div>
+                    <div class="flex flex-col py-2">
+                        <span class="text-slate-500 mb-1"><i class="fas fa-comment-dots w-5"></i> หมายเหตุ</span>
+                        <div id="modalNote" class="bg-slate-50 p-3 rounded-xl text-slate-700 text-xs">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="admin.js"></script>
+</body>
+
+</html>
