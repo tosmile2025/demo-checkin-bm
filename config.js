@@ -21,8 +21,8 @@ const CONFIG = {
     LIFF_ID_REGISTER: "2008088008-RGaXeww4",
 
     // 📍 การตั้งค่าพิกัดสถานที่ (ละติจูด, ลองจิจูด)
-    TARGET_LATITUDE: 16.808200,
-    TARGET_LONGITUDE: 100.264197,
+    TARGET_LATITUDE: 16.807157,
+    TARGET_LONGITUDE: 100.263852,
 
     // 📏 ระยะห่างที่อนุญาตให้เช็คอินได้ (หน่วยเป็นเมตร)
     ALLOWED_RANGE_METERS: 30
