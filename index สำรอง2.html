@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ระบบลงเวลา | คณะแพทยศาสตร์</title>
+
+  <link rel="icon" type="image/png" href="logo-sm.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://static.line-scdn.net/liff/edge/2.1/sdk.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['"Noto Sans Thai"', 'sans-serif'] },
+          colors: { medical: { 50: '#f0fdfa', 100: '#ccfbf1', 500: '#14b8a6', 600: '#0d9488', 700: '#0f766e', 800: '#115e59', 900: '#134e4a' } }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    ::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* Custom Radio Button Style */
+    input[type="radio"]:checked+label {
+      background-color: #0f766e;
+      color: white;
+      border-color: #0f766e;
+    }
+
+    /* PC Blocker */
+    .desktop-warning {
+      display: none;
+    }
+
+    @media (min-width: 768px) {
+      .desktop-warning {
+        display: flex !important;
+        position: fixed;
+        inset: 0;
+        background: #f8fafc;
+        z-index: 9999;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .app-container {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <div class="desktop-warning">
+    <i class="fas fa-mobile-alt text-6xl text-medical-600 mb-4"></i>
+    <h2 class="text-2xl font-bold text-slate-700 mb-2">รองรับเฉพาะสมาร์ทโฟน</h2>
+    <p class="text-slate-500">กรุณาเปิดระบบผ่านแอปพลิเคชัน LINE</p>
+  </div>
+
+  <div
+    class="app-container w-full max-w-md mx-auto flex-1 flex flex-col relative h-screen overflow-hidden bg-white shadow-xl">
+
+    <div id="loadingView"
+      class="absolute inset-0 bg-medical-800 z-50 flex flex-col items-center justify-center text-white transition-opacity duration-500">
+      <img src="logo-sm.png" class="w-24 h-24 bg-white p-2 rounded-2xl shadow-lg mb-6 animate-pulse"
+        onerror="this.src='https://via.placeholder.com/100'">
+      <div class="animate-spin rounded-full h-10 w-10 border-4 border-white border-t-transparent mb-4"></div>
+      <p class="text-lg font-medium tracking-wide">กำลังเชื่อมต่อระบบ...</p>
+    </div>
+
+    <div class="bg-medical-700 text-white p-4 shadow-md z-10 flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <img src="logo-sm.png" class="w-10 h-10 bg-white rounded-lg p-1" onerror="this.style.display='none'">
+        <div>
+          <h1 class="font-bold text-base leading-none">ระบบลงเวลาปฏิบัติงาน</h1>
+          <p id="headerDate" class="text-xs text-medical-100 mt-0.5">...</p>
+        </div>
+      </div>
+      <div id="headerTime" class="text-xl font-bold tracking-widest bg-medical-800 px-3 py-1 rounded-lg shadow-inner">
+        --:--</div>
+    </div>
+
+    <div id="registerView" class="hidden flex-1 overflow-y-auto bg-slate-50 flex flex-col">
+      <div class="p-5 text-center bg-white shadow-sm mb-2">
+        <h2 class="text-xl font-bold text-medical-700">ลงทะเบียนเข้าใช้งานครั้งแรก</h2>
+        <p class="text-xs text-slate-500 mt-1">กรุณาถ่ายรูปใบหน้าและกรอกข้อมูลให้ครบถ้วน</p>
+      </div>
+
+      <div class="p-5 flex-1 flex flex-col">
+        <div class="mb-5 text-center">
+          <div
+            class="relative w-32 h-32 mx-auto rounded-full overflow-hidden border-4 border-medical-500 shadow-md bg-slate-200 mb-3">
+            <video id="reg-camera-preview" class="absolute inset-0 w-full h-full object-cover" autoplay
+              playsinline></video>
+            <img id="reg-preview" class="absolute inset-0 w-full h-full object-cover hidden" src="">
+          </div>
+          <div class="flex justify-center gap-2">
+            <button id="reg-capture-btn"
+              class="bg-medical-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-medical-700">
+              <i class="fas fa-camera mr-1"></i> ถ่ายรูป
+            </button>
+            <button id="reg-retake-btn"
+              class="hidden bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-amber-600">
+              ถ่ายใหม่
+            </button>
+            <button onclick="switchCamera('reg')"
+              class="bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm shadow-sm">
+              <i class="fas fa-sync-alt"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-4 bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex-1">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1 pl-1">LINE ID</label>
+            <input type="text" id="reg-lineId"
+              class="w-full bg-slate-100 text-slate-500 p-3 text-sm rounded-xl outline-none" readonly>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1 pl-1">ชื่อ - นามสกุล <span
+                class="text-rose-500">*</span></label>
+            <input type="text" id="reg-name"
+              class="w-full border border-slate-300 focus:border-medical-500 p-3 text-sm rounded-xl outline-none transition"
+              placeholder="ระบุชื่อและนามสกุล">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1 pl-1">รหัสประจำตัว / นสพ. <span
+                class="text-rose-500">*</span></label>
+            <input type="text" id="reg-empId"
+              class="w-full border border-slate-300 focus:border-medical-500 p-3 text-sm rounded-xl outline-none transition"
+              placeholder="ระบุรหัสประจำตัว">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1 pl-1">ตำแหน่ง / ชั้นปี <span
+                class="text-rose-500">*</span></label>
+            <input type="text" id="reg-dept"
+              class="w-full border border-slate-300 focus:border-medical-500 p-3 text-sm rounded-xl outline-none transition"
+              placeholder="ระบุตำแหน่งหรือชั้นปี">
+          </div>
+        </div>
+
+        <button id="btn-register"
+          class="w-full mt-5 bg-medical-700 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-medical-800 transition">
+          ลงทะเบียน
+        </button>
+      </div>
+    </div>
+
+    <div id="checkinView" class="hidden flex-1 flex flex-col relative bg-slate-900">
+
+      <div class="relative flex-1 overflow-hidden">
+        <video id="chk-camera-preview" class="absolute inset-0 w-full h-full object-cover" autoplay playsinline></video>
+        <div class="absolute inset-0 shadow-[inset_0px_0px_50px_rgba(0,0,0,0.5)] pointer-events-none"></div>
+
+        <button onclick="switchCamera('chk')"
+          class="absolute top-4 right-4 bg-black/40 backdrop-blur-sm text-white w-10 h-10 rounded-full flex items-center justify-center border border-white/20 shadow-lg z-10">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+
+      <div
+        class="bg-white rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.15)] z-20 flex flex-col relative transition-all duration-300">
+
+        <div class="w-12 h-1.5 bg-slate-300 rounded-full mx-auto my-3"></div>
+
+        <div class="px-5 pb-6">
+          <div class="flex items-center gap-3 mb-5 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+            <div
+              class="w-12 h-12 rounded-full bg-medical-100 text-medical-600 flex items-center justify-center text-lg font-bold border border-medical-200">
+              <i class="fas fa-user-md"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div id="chk-name" class="font-bold text-slate-800 text-sm truncate">ชื่อพนักงาน</div>
+              <div id="chk-details" class="text-xs text-slate-500 truncate">รหัส: 00000 | ตำแหน่ง</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 mb-4">
+            <div>
+              <input type="radio" id="job-in" name="job-type" value="เข้างาน" class="hidden" checked>
+              <label for="job-in"
+                class="cursor-pointer border border-slate-200 bg-white text-slate-600 py-3 rounded-xl w-full flex items-center justify-center font-bold shadow-sm transition">
+                เข้างาน
+              </label>
+            </div>
+            <div>
+              <input type="radio" id="job-during" name="job-type" value="ระหว่างวัน" class="hidden">
+              <label for="job-during"
+                class="cursor-pointer border border-slate-200 bg-white text-slate-600 py-3 rounded-xl w-full flex items-center justify-center font-bold shadow-sm transition">
+                ระหว่างวัน
+              </label>
+            </div>
+            <div>
+              <input type="radio" id="job-out" name="job-type" value="ออกงาน" class="hidden">
+              <label for="job-out"
+                class="cursor-pointer border border-slate-200 bg-white text-slate-600 py-3 rounded-xl w-full flex items-center justify-center font-bold shadow-sm transition">
+                ออกงาน
+              </label>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <input type="text" id="chk-note"
+              class="w-full bg-slate-50 border border-slate-200 focus:border-medical-500 rounded-xl p-3 text-sm outline-none transition"
+              placeholder="เพิ่มหมายเหตุ (ถ้ามี)...">
+          </div>
+
+          <button id="btn-checkin"
+            class="w-full bg-medical-700 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-medical-800 transition flex items-center justify-center gap-2 text-lg">
+            <i class="fas fa-camera"></i> บันทึกเวลา
+          </button>
+          <p class="text-[10px] text-center text-slate-400 mt-2"><i class="fas fa-map-marker-alt"></i>
+            ระบบจะเช็คพิกัดและถ่ายภาพอัตโนมัติ</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>

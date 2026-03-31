@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ตั้งค่าพื้นที่ลงเวลา (Admin)</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8fafc;
+        }
+    </style>
+</head>
+
+<body class="p-4 sm:p-8">
+
+    <div class="max-w-4xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800"><i class="fas fa-map-marked-alt text-rose-500 mr-2"></i>
+                    ตั้งค่าพื้นที่ลงเวลา</h1>
+                <p class="text-slate-500 text-sm mt-1">คลิกที่แผนที่เพื่อย้ายหมุด หรือกรอกพิกัดด้านล่าง</p>
+            </div>
+            <a href="admin.html"
+                class="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg font-semibold hover:bg-slate-300 transition">
+                กลับแดชบอร์ด
+            </a>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">ละติจูด (Latitude)</label>
+                        <input type="number" id="inputLat"
+                            class="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">ลองจิจูด
+                            (Longitude)</label>
+                        <input type="number" id="inputLng"
+                            class="w-full bg-slate-50 border border-slate-300 p-3 rounded-xl outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">รัศมีที่อนุญาต
+                            (เมตร)</label>
+                        <div class="flex items-center gap-3">
+                            <input type="range" id="inputRangeSlider" min="10" max="500" step="5"
+                                class="flex-1 accent-blue-500">
+                            <input type="number" id="inputRange"
+                                class="w-20 text-center bg-slate-50 border border-slate-300 p-2 rounded-xl outline-none focus:border-blue-500 font-bold">
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="saveSettings()" id="saveBtn"
+                    class="w-full mt-6 bg-blue-600 text-white font-bold py-3 rounded-xl shadow-md hover:bg-blue-700 transition">
+                    <i class="fas fa-save mr-1"></i> บันทึกการตั้งค่า
+                </button>
+            </div>
+
+            <div class="md:col-span-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+                <div id="map" class="w-full h-[500px] rounded-xl bg-slate-100 z-0"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        let map, marker, circle;
+
+        // ตั้งค่าพิกัดเริ่มต้นก่อนโหลด
+        // ตั้งค่าพิกัดเริ่มต้นก่อนโหลด (ดึงค่า Default จาก config.js มาใช้ชั่วคราวก่อนโหลด Sheet)
+        let currentLat = CONFIG.TARGET_LATITUDE;
+        let currentLng = CONFIG.TARGET_LONGITUDE;
+        let currentRange = CONFIG.ALLOWED_RANGE_METERS;
+
+        const latInput = document.getElementById('inputLat');
+        const lngInput = document.getElementById('inputLng');
+        const rangeInput = document.getElementById('inputRange');
+        const rangeSlider = document.getElementById('inputRangeSlider');
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            initMap();
+            await fetchSettings();
+        });
+
+        function initMap() {
+            map = L.map('map').setView([currentLat, currentLng], 17);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+
+            // สร้างหมุดและวงกลม
+            marker = L.marker([currentLat, currentLng], { draggable: true }).addTo(map);
+            circle = L.circle([currentLat, currentLng], { color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.2, radius: currentRange }).addTo(map);
+
+            // ดักจับการลากหมุด
+            marker.on('dragend', function (e) {
+                const pos = marker.getLatLng();
+                updateInputsAndCircle(pos.lat, pos.lng, currentRange);
+            });
+
+            // ดักจับการคลิกบนแผนที่
+            map.on('click', function (e) {
+                updateInputsAndCircle(e.latlng.lat, e.latlng.lng, currentRange);
+            });
+
+            // เชื่อม Slider กับ Input รัศมี
+            rangeSlider.addEventListener('input', (e) => {
+                currentRange = parseInt(e.target.value);
+                rangeInput.value = currentRange;
+                circle.setRadius(currentRange);
+            });
+
+            rangeInput.addEventListener('change', (e) => {
+                currentRange = parseInt(e.target.value);
+                rangeSlider.value = currentRange;
+                circle.setRadius(currentRange);
+            });
+
+            // เชื่อม Input พิกัดกับแผนที่
+            const updateFromInput = () => {
+                updateInputsAndCircle(parseFloat(latInput.value), parseFloat(lngInput.value), currentRange);
+                map.panTo([parseFloat(latInput.value), parseFloat(lngInput.value)]);
+            };
+            latInput.addEventListener('change', updateFromInput);
+            lngInput.addEventListener('change', updateFromInput);
+        }
+
+        function updateInputsAndCircle(lat, lng, range) {
+            currentLat = lat; currentLng = lng; currentRange = range;
+
+            latInput.value = lat.toFixed(6);
+            lngInput.value = lng.toFixed(6);
+            rangeInput.value = range;
+            rangeSlider.value = range;
+
+            marker.setLatLng([lat, lng]);
+            circle.setLatLng([lat, lng]);
+            circle.setRadius(range);
+        }
+
+        // ดึงค่าจาก Google Sheet
+        async function fetchSettings() {
+            Swal.fire({ title: 'กำลังโหลดข้อมูลพิกัด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            try {
+                const response = await fetch(CONFIG.WEB_APP_API, {
+                    method: "POST",
+                    body: JSON.stringify({ action: "getSettings" })
+                });
+                const data = await response.json();
+                if (data && data.lat) {
+                    updateInputsAndCircle(data.lat, data.lng, data.range);
+                    map.setView([data.lat, data.lng], 17);
+                }
+                Swal.close();
+            } catch (error) {
+                console.error(error);
+                Swal.fire("ข้อผิดพลาด", "ไม่สามารถดึงข้อมูลพิกัดได้", "error");
+            }
+        }
+
+        // บันทึกกลับลง Google Sheet
+        async function saveSettings() {
+            const btn = document.getElementById('saveBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังบันทึก...';
+
+            try {
+                const payload = {
+                    action: "saveSettings",
+                    lat: currentLat,
+                    lng: currentLng,
+                    range: currentRange
+                };
+
+                const response = await fetch(CONFIG.WEB_APP_API, {
+                    method: "POST",
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.text();
+                Swal.fire({ title: "สำเร็จ!", text: "อัปเดตจุดลงเวลาเรียบร้อยแล้ว", icon: "success", timer: 2000, showConfirmButton: false });
+            } catch (error) {
+                Swal.fire("ข้อผิดพลาด", "บันทึกข้อมูลล้มเหลว", "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save mr-1"></i> บันทึกการตั้งค่า';
+            }
+        }
+    </script>
+</body>
+
+</html>
