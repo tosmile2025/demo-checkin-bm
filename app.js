@@ -387,6 +387,12 @@ function closeMapModal() {
 // ==========================================
 async function sendFlexMessage(data) {
     const jobColor = data.job === 'เข้างาน' ? '#0f766e' : data.job === 'ออกงาน' ? '#e11d48' : '#d97706';
+
+    // แปลงวันที่ปัจจุบันให้เป็นรูปแบบ "31 มี.ค. 2569"
+    const now = new Date();
+    const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const displayThaiDate = `${now.getDate()} ${thaiMonths[now.getMonth()]} ${now.getFullYear() + 543}`;
+
     const flexMsg = {
         type: "flex", altText: `บันทึก${data.job}`,
         contents: {
@@ -394,15 +400,26 @@ async function sendFlexMessage(data) {
             body: {
                 type: "box", layout: "vertical", spacing: "md",
                 contents: [
-                    { type: "box", layout: "horizontal", contents: [{ type: "text", text: "บันทึกเวลาปฏิบัติงาน", weight: "bold", size: "md", color: "#1e293b" }, { type: "text", text: data.job, weight: "bold", size: "md", color: jobColor, align: "end" }] },
+                    // ส่วนหัว: สถานะการลงเวลา
+                    {
+                        type: "box", layout: "horizontal", contents: [
+                            { type: "text", text: "บันทึกเวลา", weight: "bold", size: "md", color: "#1e293b" },
+                            { type: "text", text: data.job, weight: "bold", size: "md", color: jobColor, align: "end" }
+                        ]
+                    },
                     { type: "separator" },
-                    { type: "box", layout: "vertical", spacing: "sm", contents: [{ type: "box", layout: "baseline", contents: [{ type: "text", text: "ชื่อ", weight: "bold", size: "sm", color: "#64748b" }, { type: "text", text: data.name, size: "sm", align: "end", color: "#0f172a" }] }, { type: "box", layout: "baseline", contents: [{ type: "text", text: "รหัส", weight: "bold", size: "sm", color: "#64748b" }, { type: "text", text: data.role, size: "sm", align: "end", color: "#0f172a" }] }] },
-                    { type: "separator" },
-                    { type: "box", layout: "vertical", contents: [{ type: "box", layout: "baseline", contents: [{ type: "text", text: "วันที่", weight: "bold", color: "#64748b" }, { type: "text", text: data.today, weight: "bold", align: "end", color: "#0f172a" }] }, { type: "box", layout: "baseline", contents: [{ type: "text", text: "เวลา", weight: "bold", color: "#64748b" }, { type: "text", text: data.time, weight: "bold", size: "xl", color: jobColor, align: "end" }] }] },
+                    // ส่วนข้อมูล: ใช้ displayThaiDate ที่เราแปลงไว้
+                    {
+                        type: "box", layout: "vertical", contents: [
+                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "วันที่", weight: "bold", color: "#64748b" }, { type: "text", text: displayThaiDate, weight: "bold", align: "end", color: "#0f172a" }] },
+                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "เวลา", weight: "bold", color: "#64748b" }, { type: "text", text: data.time + " น.", weight: "bold", size: "xl", color: jobColor, align: "end" }] }
+                        ]
+                    }
                 ]
             }
         }
     };
-    try { await liff.sendMessages([flexMsg]); } catch (e) { }
+
+    try { await liff.sendMessages([flexMsg]); } catch (e) { console.error("LIFF sendMessages error", e); }
     liff.closeWindow();
 }
