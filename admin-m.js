@@ -157,9 +157,9 @@ function renderCards() {
 
         // 🌟 ขยายขนาด Badge ป้ายสถานะในการ์ด
         let badgeClass = "bg-slate-100 text-slate-600";
-        if (status === 'เข้างาน') badgeClass = "bg-medical-50 text-medical-600 border border-medical-100";
-        if (status === 'ออกงาน') badgeClass = "bg-rose-50 text-rose-600 border border-rose-100";
-        if (status === 'ระหว่างวัน') badgeClass = "bg-amber-50 text-amber-600 border border-amber-100";
+        if (status === 'เข้าเวร') badgeClass = "bg-medical-50 text-medical-600 border border-medical-100";
+        if (status === 'ออกเวร') badgeClass = "bg-rose-50 text-rose-600 border border-rose-100";
+        if (status === 'ราว ward') badgeClass = "bg-amber-50 text-amber-600 border border-amber-100";
 
         let lateHtml = '';
         if (statusDetail === 'สาย') {
@@ -213,8 +213,8 @@ function openModal(item) {
     const status = item[4] || '-';
     const statusEl = document.getElementById('m-status');
     statusEl.textContent = status;
-    if (status === 'เข้างาน') statusEl.className = "font-bold text-medical-700";
-    else if (status === 'ออกงาน') statusEl.className = "font-bold text-rose-600";
+    if (status === 'เข้าเวร') statusEl.className = "font-bold text-medical-700";
+    else if (status === 'ออกเวร') statusEl.className = "font-bold text-rose-600";
     else statusEl.className = "font-bold text-amber-600";
 
     document.getElementById('m-date').textContent = f.d;

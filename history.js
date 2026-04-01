@@ -181,7 +181,7 @@ function buildTable() {
             let badgeStyle = "border-slate-200 text-slate-600 bg-slate-50";
             let dotStyle = "bg-slate-400";
 
-            if (job === 'เข้างาน') {
+            if (job === 'เข้าเวร') {
                 if (status === 'สาย') {
                     badgeStyle = "border-amber-200 text-amber-700 bg-amber-50";
                     dotStyle = "bg-amber-500";
@@ -189,7 +189,7 @@ function buildTable() {
                     badgeStyle = "border-medical-200 text-medical-700 bg-medical-50";
                     dotStyle = "bg-medical-500";
                 }
-            } else if (job === 'ออกงาน') {
+            } else if (job === 'ออกเวร') {
                 if (status === 'ออกก่อนเวลา') {
                     badgeStyle = "border-orange-200 text-orange-700 bg-orange-50";
                     dotStyle = "bg-orange-500";
@@ -197,7 +197,7 @@ function buildTable() {
                     badgeStyle = "border-rose-200 text-rose-700 bg-rose-50";
                     dotStyle = "bg-rose-500";
                 }
-            } else if (job === 'ระหว่างวัน') {
+            } else if (job === 'ราว ward') {
                 badgeStyle = "border-blue-200 text-blue-700 bg-blue-50";
                 dotStyle = "bg-blue-500";
             }

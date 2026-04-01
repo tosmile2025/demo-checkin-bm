@@ -386,7 +386,7 @@ function closeMapModal() {
 // 💬 6. LINE FLEX MESSAGE
 // ==========================================
 async function sendFlexMessage(data) {
-    const jobColor = data.job === 'เข้างาน' ? '#0f766e' : data.job === 'ออกงาน' ? '#e11d48' : '#d97706';
+    const jobColor = data.job === 'เข้าเวร' ? '#0f766e' : data.job === 'ออกเวร' ? '#e11d48' : '#d97706';
 
     // แปลงวันที่ปัจจุบันให้เป็นรูปแบบ "31 มี.ค. 2569"
     const now = new Date();

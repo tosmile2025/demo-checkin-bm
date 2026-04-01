@@ -144,8 +144,8 @@ function setSorting(asc, btnElement) {
 function applyFiltersAndRender() {
     const searchVal = document.getElementById('filterSearch').value.toLowerCase();
     const deptVal = document.getElementById('filterDept').value; // ชั้นปี
+    const showWard = document.getElementById('filterWard').checked;
     const showIn = document.getElementById('filterIn').checked;
-    const showDuring = document.getElementById('filterDuring').checked;
     const showOut = document.getElementById('filterOut').checked;
 
     const sd = document.getElementById('startDate').value;
@@ -174,10 +174,10 @@ function applyFiltersAndRender() {
         if (deptVal && !dept.includes(deptVal)) return false;
 
         // 2. สถานะ
-        const matchIn = showIn && status === 'เข้างาน';
-        const matchDuring = showDuring && status === 'ระหว่างวัน';
-        const matchOut = showOut && status === 'ออกงาน';
-        if (!matchIn && !matchDuring && !matchOut) return false;
+        const matchWard = showWard && status === 'ราว ward';
+        const matchIn = showIn && status === 'เข้าเวร';
+        const matchOut = showOut && status === 'ออกเวร';
+        if (!matchWard && !matchIn && !matchOut) return false;
 
         // 3. วันที่ & เวลา
         if (startDateObj || endDateObj) {
@@ -209,9 +209,9 @@ function applyFiltersAndRender() {
 // 🗂️ RENDER TABLE
 // ==========================================
 function getStatusStyle(status) {
-    if (status === 'เข้างาน') return { dot: 'dot-green', badge: 'bg-medical-50 text-medical-700 border-medical-200' };
-    if (status === 'ออกงาน') return { dot: 'dot-red', badge: 'bg-rose-50 text-rose-700 border-rose-200' };
-    if (status === 'ระหว่างวัน') return { dot: 'dot-yellow', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
+    if (status === 'เข้าเวร') return { dot: 'dot-green', badge: 'bg-medical-50 text-medical-700 border-medical-200' };
+    if (status === 'ออกเวร') return { dot: 'dot-red', badge: 'bg-rose-50 text-rose-700 border-rose-200' };
+    if (status === 'ราว ward') return { dot: 'dot-yellow', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
     return { dot: 'dot-gray', badge: 'bg-slate-100 text-slate-600 border-slate-200' };
 }
 
