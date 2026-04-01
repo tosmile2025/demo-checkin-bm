@@ -89,31 +89,56 @@ async function loadUserDataAndHistory() {
 }
 
 // ==========================================
-// 📅 DATE FORMATTER (แปลงวันที่เป็นภาษาไทย)
+// 📅 DATE FORMATTER (แปลงวันที่เป็นภาษาไทย รองรับ Google Sheets ISO Date)
 // ==========================================
 function formatThaiDateTime(dateStr, timeStr) {
-    if (!dateStr) return "-";
+    if (!dateStr || dateStr === "-") return "-";
 
     try {
-        // 🌟 บังคับแปลงค่าให้เป็น String ป้องกันกรณีที่ดึงมาเป็นรูปแบบอื่นแล้วฟังก์ชัน split พัง
+        let day, month, year;
+        let timeFormatted = "";
+
         const safeDateStr = String(dateStr).trim();
-        const parts = safeDateStr.split('/');
+        const safeTimeStr = String(timeStr).trim();
 
-        if (parts.length !== 3) return `${safeDateStr} ${timeStr || ''}`;
+        // 🌟 1. เช็คว่าเป็นรูปแบบเวลาดิบจาก Google Sheets หรือไม่ (มีตัว T และ Z)
+        if (safeDateStr.includes("T") && safeDateStr.includes("Z")) {
+            const d = new Date(safeDateStr);
+            day = d.getDate();
+            month = d.getMonth(); // ไม่ต้อง -1 เพราะ Date object เริ่มจาก 0 อยู่แล้ว
+            year = d.getFullYear();
+        } else {
+            // 🌟 2. ถ้าเป็นแบบข้อความ Text ปกติ "DD/MM/YYYY"
+            const parts = safeDateStr.split('/');
+            if (parts.length === 3) {
+                day = parseInt(parts[0], 10);
+                month = parseInt(parts[1], 10) - 1;
+                year = parseInt(parts[2], 10);
+            } else {
+                return `${safeDateStr} ${safeTimeStr}`; // ถ้าอ่านไม่ออก คืนค่าเดิม
+            }
+        }
 
-        const day = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        let year = parseInt(parts[2], 10);
+        // 🌟 3. จัดการเวลา (รองรับทั้งแบบ ISO 1899-12-30T...Z และแบบ 08:30)
+        if (safeTimeStr.includes("T") && safeTimeStr.includes("Z")) {
+            const t = new Date(safeTimeStr);
+            const hh = String(t.getHours()).padStart(2, '0');
+            const mm = String(t.getMinutes()).padStart(2, '0');
+            timeFormatted = `${hh}:${mm} น.`;
+        } else if (safeTimeStr && safeTimeStr !== "undefined" && safeTimeStr !== "-") {
+            timeFormatted = `${safeTimeStr} น.`;
+        }
 
+        // แปลง ค.ศ. เป็น พ.ศ.
         if (year < 2500) year += 543;
 
         const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-        const timeFormatted = timeStr ? `${String(timeStr).trim()} น.` : '';
 
         return `${day} ${thaiMonths[month]} ${year} <span class="text-medical-600 ml-1">${timeFormatted}</span>`;
+
     } catch (e) {
         console.error("Date format error:", e);
-        return String(dateStr); // ถ้าพังให้โชว์ข้อความเดิม
+        return String(dateStr); // ถ้าพังให้โชว์ข้อความเดิมกันตารางหาย
     }
 }
 
