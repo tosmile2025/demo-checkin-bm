@@ -7,7 +7,7 @@ let currentPage = 1;
 let tableData = [];
 let filteredData = [];
 
-// รูประบบพื้นฐาน (กรณีไม่มีรูปโปรไฟล์ จะได้ไม่โดนเครือข่ายบล็อก)
+// 🌟 รูประบบพื้นฐาน (กันโดนเครือข่ายโรงพยาบาลบล็อก)
 const DEFAULT_AVATAR = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/No-Image-Placeholder.svg/330px-No-Image-Placeholder.svg.png";
 
 // ฟังก์ชันเปิด/ปิด Loading ที่ปุ่ม
@@ -26,14 +26,13 @@ function setButtonState(buttonElement, isLoading, originalText, loadingText) {
 }
 
 // ==========================================
-// 📡 FETCH DATA (อัปเกรดเป็น POST เพื่อแก้ปัญหาการโหลดข้อมูล)
+// 📡 FETCH DATA
 // ==========================================
 async function fetchData() {
     const tableBody = document.querySelector("#data-table tbody");
     tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-16 text-slate-400"><div class="animate-spin rounded-full h-8 w-8 border-4 border-medical-200 border-t-medical-600 mx-auto mb-3"></div><div class="font-medium text-base">กำลังโหลดข้อมูล...</div></td></tr>`;
 
     try {
-        // 🌟 แก้ไขเป็น POST Request เพื่อป้องกัน Google บล็อก
         const response = await fetch(CONFIG.WEB_APP_API, {
             method: 'POST',
             body: JSON.stringify({ action: 'fetchData', source: 'member' })
@@ -76,9 +75,9 @@ function renderTable() {
         const empCode = row[3] || "-";
         const dept = row[4] || "-";
 
-        // 🌟 ใช้รูปภาพ Default ถ้าไม่มีรูป ป้องกันเว็บพัง
+        // 🌟 แก้ไขบัครูปภาพ: ใช้รูป Default ถ้า URL ไม่ถูกต้อง
         let imgUrl = row[5];
-        if (!imgUrl || imgUrl.trim() === "" || !imgUrl.startsWith("http")) {
+        if (!imgUrl || String(imgUrl).trim() === "" || !String(imgUrl).startsWith("http")) {
             imgUrl = DEFAULT_AVATAR;
         }
 
@@ -163,8 +162,9 @@ function openEditModal(row) {
     document.getElementById("edit-employeeID").value = row[3] || "";
     document.getElementById("edit-department").value = row[4] || "";
 
+    // 🌟 แก้ไขบัครูปภาพใน Modal
     let imgUrl = row[5];
-    if (!imgUrl || imgUrl.trim() === "" || !imgUrl.startsWith("http")) {
+    if (!imgUrl || String(imgUrl).trim() === "" || !String(imgUrl).startsWith("http")) {
         imgUrl = DEFAULT_AVATAR;
     }
     document.getElementById("edit-imageUrl").value = row[5] || "";
@@ -331,9 +331,10 @@ function applyFilters() {
     const yearVal = document.getElementById("filter-year").value.trim();
 
     filteredData = tableData.filter((row) => {
-        const name = (row[2] || "").toLowerCase();
-        const empId = (row[3] || "").toLowerCase();
-        const dept = (row[4] || "").toString();
+        // 🌟 แก้ไขบัค toLowerCase: ครอบด้วย String() ป้องกันข้อมูลเป็น Number
+        const name = String(row[2] || "").toLowerCase();
+        const empId = String(row[3] || "").toLowerCase();
+        const dept = String(row[4] || "");
 
         if (searchVal && !name.includes(searchVal) && !empId.includes(searchVal)) return false;
         if (yearVal && dept !== yearVal) return false;
