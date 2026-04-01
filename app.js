@@ -2,7 +2,6 @@
 // 🏥 MEDICAL TIME ATTENDANCE SYSTEM (SPA)
 // ==========================================
 
-// 🌟 ระบบพิกัดเป้าหมาย (เปลี่ยนจาก Object เดี่ยว เป็น Array เพื่อรองรับหลายหมุด)
 let TARGET_LOCATIONS = [{
     id: 'default',
     name: 'จุดเริ่มต้น',
@@ -14,26 +13,56 @@ let TARGET_LOCATIONS = [{
 let currentUserData = null;
 let currentUserId = null;
 
-// กล้อง
 let stream;
 let currentFacingMode = "user";
 let activeCameraMode = null;
 
-// ระบบพิกัด (GPS แบบ Pre-fetch)
 let watchId = null;
 let cachedLocation = null;
 
-// ระบบแผนที่ Leaflet
 let leafletMap = null;
 let userMarker = null;
 
 // ==========================================
-// 🚀 1. SYSTEM INITIALIZATION
+// 🚀 1. SYSTEM INITIALIZATION (อัปเกรดโหลดเร็ว + แจ้งเปอร์เซ็นต์)
 // ==========================================
+
+// ฟังก์ชันอัปเดตหน้าจอโหลด
+function updateLoading(percent, mainText, subText) {
+    const progressEl = document.getElementById('loadingProgress');
+    const mainTextEl = document.getElementById('loadingText');
+    const subTextEl = document.getElementById('loadingSubText');
+
+    if (progressEl) progressEl.style.width = `${percent}%`;
+    if (mainTextEl && mainText) mainTextEl.textContent = mainText;
+    if (subTextEl && subText) subTextEl.textContent = subText;
+}
+
+// ฟังก์ชันโชว์ Error ในหน้าโหลด
+function showLoadingError(message) {
+    document.getElementById('loadingContent').classList.add('hidden'); // ซ่อนหลอดโหลด
+    const errorBox = document.getElementById('loadingError');
+    errorBox.classList.remove('hidden');
+    errorBox.classList.add('flex');
+    document.getElementById('loadingErrorText').textContent = message;
+}
+
 window.onload = async function () {
     startClock();
-    await fetchMapSettings(); // ⚡ ดึงพิกัดทั้งหมดจาก Google Sheet
-    await initializeLiff();
+
+    try {
+        updateLoading(15, 'เชื่อมต่อเซิร์ฟเวอร์...', 'กำลังเตรียมข้อมูลระบบ');
+
+        // 🌟 โหลดข้อมูล 2 ทางพร้อมกัน (Parallel Fetch) เพื่อความเร็ว X2
+        const mapPromise = fetchMapSettings().catch(e => console.warn(e)); // ถ้าแผนที่พัง ให้ใช้ค่า Default แทน ไม่ให้แอปค้าง
+        const liffPromise = initializeLiffCore(); // ถ้า LIFF พัง แอปจะหยุดแล้วโชว์ Error
+
+        await Promise.all([mapPromise, liffPromise]);
+
+    } catch (error) {
+        console.error("Initialization Error:", error);
+        showLoadingError(error.message || "การเชื่อมต่อเครือข่ายล้มเหลว กรุณาลองใหม่");
+    }
 };
 
 function startClock() {
@@ -44,65 +73,64 @@ function startClock() {
     }, 1000);
 }
 
-// ⚡ ฟังก์ชันโหลดข้อมูลพิกัดจาก Google Sheet (รองรับหลายหมุด)
 async function fetchMapSettings() {
-    try {
-        const res = await fetch(CONFIG.WEB_APP_API, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'getSettings' })
-        });
-        const data = await res.json();
+    updateLoading(30, 'ตรวจสอบพิกัด...', 'ดาวน์โหลดตำแหน่งพื้นที่');
+    const res = await fetch(CONFIG.WEB_APP_API, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getSettings' })
+    });
+    const data = await res.json();
 
-        // ถ้าแอดมินอัปเกรดเป็นหลายหมุดแล้ว จะคืนค่าเป็น Array
-        if (Array.isArray(data) && data.length > 0) {
-            TARGET_LOCATIONS = data;
-        } else if (data && data.lat) {
-            // เผื่อระบบยังเป็นแบบเก่า (หมุดเดียว)
-            TARGET_LOCATIONS = [{ id: 'old', name: 'จุดหลัก', lat: parseFloat(data.lat), lng: parseFloat(data.lng), range: parseInt(data.range) }];
-        }
-    } catch (e) {
-        console.warn("ไม่สามารถโหลดตั้งค่าหมุดได้ จะใช้ค่าเริ่มต้นจาก config.js แทน", e);
+    if (Array.isArray(data) && data.length > 0) {
+        TARGET_LOCATIONS = data;
+    } else if (data && data.lat) {
+        TARGET_LOCATIONS = [{ id: 'old', name: 'จุดหลัก', lat: parseFloat(data.lat), lng: parseFloat(data.lng), range: parseInt(data.range) }];
     }
 }
 
-async function initializeLiff() {
-    try {
-        await liff.init({ liffId: CONFIG.LIFF_ID_CHECKIN });
-        if (liff.isLoggedIn()) {
-            const profile = await liff.getProfile();
-            currentUserId = profile.userId;
-            document.getElementById('reg-lineId').value = currentUserId;
-            await checkUserStatus(currentUserId);
-        } else {
-            liff.login();
-        }
-    } catch (error) {
-        Swal.fire("ข้อผิดพลาด", "ไม่สามารถเชื่อมต่อระบบ LINE ได้", "error");
+async function initializeLiffCore() {
+    updateLoading(45, 'เชื่อมต่อ LINE...', 'ตรวจสอบการเข้าสู่ระบบ');
+    await liff.init({ liffId: CONFIG.LIFF_ID_CHECKIN });
+
+    if (liff.isLoggedIn()) {
+        const profile = await liff.getProfile();
+        currentUserId = profile.userId;
+        document.getElementById('reg-lineId').value = currentUserId;
+
+        updateLoading(65, 'ตรวจสอบประวัติ...', 'ค้นหาข้อมูลในฐานข้อมูล');
+        await checkUserStatus(currentUserId);
+    } else {
+        liff.login();
     }
 }
 
 async function checkUserStatus(userId) {
-    try {
-        const response = await fetch(CONFIG.WEB_APP_API, {
-            method: "POST",
-            body: JSON.stringify({ action: "fetchData", source: "member", userId: userId }),
-        });
-        const data = await response.json();
-        const userRows = data.filter((row) => row[1] === userId);
+    const response = await fetch(CONFIG.WEB_APP_API, {
+        method: "POST",
+        body: JSON.stringify({ action: "fetchData", source: "member", userId: userId }),
+    });
 
-        if (userRows.length > 0) {
-            userRows.sort((a, b) => new Date(b[6]) - new Date(a[6]));
-            currentUserData = userRows[0];
+    if (!response.ok) throw new Error("ไม่สามารถติดต่อฐานข้อมูลได้ (API Error)");
 
-            // 🌟 ให้สลับหน้าจอให้เสร็จก่อนค่อยเปิดกล้อง (แก้บัค Android ค้าง)
-            switchView('checkinView');
-            setTimeout(() => { setupCheckinView(); }, 500);
-        } else {
-            switchView('registerView');
-            setTimeout(() => { setupRegisterView(); }, 500);
-        }
-    } catch (error) {
-        Swal.fire("ข้อผิดพลาด", "เชื่อมต่อฐานข้อมูลล้มเหลว กรุณาลองใหม่", "error");
+    const data = await response.json();
+    const userRows = data.filter((row) => row[1] === userId);
+
+    updateLoading(90, 'จัดเตรียมหน้าจอ...', 'โหลดข้อมูลเสร็จสิ้น');
+
+    if (userRows.length > 0) {
+        userRows.sort((a, b) => new Date(b[6]) - new Date(a[6]));
+        currentUserData = userRows[0];
+
+        updateLoading(100, 'เสร็จสิ้น!', 'เข้าสู่ระบบลงเวลา');
+
+        // 🌟 แก้บัคแอปค้าง: สลับหน้าจอให้เสร็จสมบูรณ์ "ก่อน" ค่อยเรียกกล้องทำงาน
+        switchView('checkinView');
+        setTimeout(() => { setupCheckinView(); }, 600);
+    } else {
+        updateLoading(100, 'เสร็จสิ้น!', 'เข้าสู่หน้าลงทะเบียน');
+
+        switchView('registerView');
+        setTimeout(() => { setupRegisterView(); }, 600);
     }
 }
 
@@ -115,17 +143,18 @@ function switchView(viewId) {
         document.getElementById('loadingView').classList.add('hidden');
         document.getElementById(viewId).classList.remove('hidden');
         document.getElementById(viewId).classList.add('flex');
-    }, 300);
+    }, 400);
 }
 
 // ==========================================
-// 📸 2. CAMERA & IMAGE OPTIMIZATION
+// 📸 2. CAMERA & IMAGE OPTIMIZATION (ป้องกันกล้องพัง)
 // ==========================================
 function startCamera(mode) {
     activeCameraMode = mode;
     const videoEl = document.getElementById(`${mode}-camera-preview`);
     if (stream) { stream.getTracks().forEach(track => track.stop()); }
 
+    // ถ้าเปิดกล้องไม่ได้ (คนไม่อนุญาต หรือ WebView พัง) แอปจะไม่ค้าง แต่จะขึ้นแจ้งเตือนแทน
     navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } })
         .then(function (videoStream) {
             stream = videoStream;
@@ -134,8 +163,16 @@ function startCamera(mode) {
             const previewEl = document.getElementById(`${mode}-preview`);
             if (previewEl) previewEl.classList.add('hidden');
         })
-        .catch(function () {
-            Swal.fire("กล้องไม่พร้อม", "กรุณาอนุญาตการเข้าถึงกล้อง", "error");
+        .catch(function (err) {
+            console.error("Camera Error:", err);
+            // แสดงป้ายแดงแทนที่รูปกล้อง
+            videoEl.outerHTML = `<div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-200 text-slate-500 p-4 text-center border-2 border-dashed border-slate-300"><i class="fas fa-camera-slash text-4xl mb-2 text-rose-400"></i><p class="text-sm font-bold text-slate-700">ไม่สามารถเปิดกล้องได้</p><p class="text-xs mt-1">กรุณาตรวจสอบการอนุญาต<br>การเข้าถึงกล้องในการตั้งค่าแอป LINE</p></div>`;
+            Swal.fire({
+                icon: "warning",
+                title: "เข้าถึงกล้องไม่ได้",
+                text: "กรุณาอนุญาตให้ LINE เข้าถึงกล้องเพื่อถ่ายรูป",
+                confirmButtonColor: "#0f766e"
+            });
         });
 }
 
@@ -144,12 +181,14 @@ function switchCamera(mode) {
     startCamera(mode);
 }
 
-// ⚡ บีบอัดรูปให้เล็กลงเพื่อความเร็วสูงสุด
 function captureOptimizedFrame(mode) {
     const video = document.getElementById(`${mode}-camera-preview`);
+    if (!video || !video.videoWidth) {
+        throw new Error("ไม่มีภาพจากกล้อง");
+    }
     const canvas = document.createElement("canvas");
 
-    const MAX_WIDTH = 600; // ย่อขนาดความกว้างภาพ
+    const MAX_WIDTH = 600;
     const scale = MAX_WIDTH / video.videoWidth;
     canvas.width = MAX_WIDTH;
     canvas.height = video.videoHeight * scale;
@@ -157,7 +196,6 @@ function captureOptimizedFrame(mode) {
     const ctx = canvas.getContext("2d");
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // บีบอัดเป็น JPEG 70% (เร็วขึ้น 10 เท่าเมื่อเทียบกับ PNG ปกติ)
     return canvas.toDataURL("image/jpeg", 0.7);
 }
 
@@ -167,7 +205,6 @@ function captureOptimizedFrame(mode) {
 let capturedRegImage = null;
 
 function setupRegisterView() {
-    // โหลดกล้องหลังจากหน้าจอแสดงแล้ว
     startCamera('reg');
     const captureBtn = document.getElementById('reg-capture-btn');
     const retakeBtn = document.getElementById('reg-retake-btn');
@@ -175,14 +212,18 @@ function setupRegisterView() {
     const videoEl = document.getElementById('reg-camera-preview');
 
     captureBtn.onclick = () => {
-        capturedRegImage = captureOptimizedFrame('reg');
-        previewImg.src = capturedRegImage;
-        previewImg.classList.remove('hidden');
-        videoEl.style.display = 'none';
+        try {
+            capturedRegImage = captureOptimizedFrame('reg');
+            previewImg.src = capturedRegImage;
+            previewImg.classList.remove('hidden');
+            if (videoEl) videoEl.style.display = 'none';
 
-        captureBtn.classList.add('hidden');
-        retakeBtn.classList.remove('hidden');
-        if (stream) stream.getTracks().forEach(track => track.stop());
+            captureBtn.classList.add('hidden');
+            retakeBtn.classList.remove('hidden');
+            if (stream) stream.getTracks().forEach(track => track.stop());
+        } catch (e) {
+            Swal.fire("ข้อผิดพลาด", "ไม่สามารถถ่ายภาพได้", "error");
+        }
     };
 
     retakeBtn.onclick = () => {
@@ -218,10 +259,9 @@ function submitRegistration() {
         .then(() => {
             Swal.fire({ title: "สำเร็จ!", text: "ลงทะเบียนเรียบร้อยแล้ว", icon: "success", confirmButtonColor: "#0f766e" })
                 .then(() => {
-                    // currentUserData index: 0:id, 1:lineId, 2:name, 3:empId, 4:dept, 5:imgUrl
                     currentUserData = ["", currentUserId, name, empId, dept, capturedRegImage];
-                    setupCheckinView();
                     switchView('checkinView');
+                    setTimeout(() => { setupCheckinView(); }, 500);
                 });
         }).catch(() => Swal.fire("ข้อผิดพลาด", "ไม่สามารถส่งข้อมูลได้", "error"));
 }
@@ -237,7 +277,6 @@ function setupCheckinView() {
         document.getElementById('chk-profile-img').src = currentUserData[5];
     }
 
-    // โหลดกล้องและ GPS หลังจากหน้าจอแสดงแล้ว
     startCamera('chk');
     startBackgroundGPS();
 
@@ -262,18 +301,15 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// 🌟 อัปเกรดให้ลูปเช็คกับทุกหมุด
 async function executeCheckin(lat, lng) {
     let inRange = false;
     let nearestDistance = Infinity;
     let targetLocationName = "ไม่ทราบสถานที่";
 
-    // เทียบระยะทางกับหมุดทุกตัวในระบบ
     for (const loc of TARGET_LOCATIONS) {
         const distance = calculateDistance(lat, lng, loc.lat, loc.lng);
         if (distance < nearestDistance) nearestDistance = distance;
 
-        // ถ้าเข้าเงื่อนไขหมุดใดหมุดหนึ่ง ถือว่าผ่านทันที
         if (distance <= loc.range) {
             inRange = true;
             targetLocationName = loc.name;
@@ -285,34 +321,38 @@ async function executeCheckin(lat, lng) {
         return Swal.fire({ icon: "error", title: "อยู่นอกพื้นที่!", text: `คุณอยู่ห่างจากจุดลงเวลาที่ใกล้ที่สุด ${nearestDistance.toFixed(0)} เมตร`, confirmButtonColor: "#0f766e" });
     }
 
-    const capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
-    const jobType = document.querySelector('input[name="job-type"]:checked').value;
-    const note = document.getElementById('chk-note').value;
+    try {
+        const capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
+        const jobType = document.querySelector('input[name="job-type"]:checked').value;
+        const note = document.getElementById('chk-note').value;
 
-    const now = new Date();
-    const payload = {
-        base64: capturedImageBase64,
-        name: currentUserData[2],
-        role: currentUserData[3],
-        job: jobType,
-        note: note,
-        today: `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`,
-        time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
-        lat: lat,
-        long: lng,
-        address: targetLocationName, // บันทึกชื่อวอร์ดแทนที่อยู่แบบเดิม
-        user: currentUserId
-    };
+        const now = new Date();
+        const payload = {
+            base64: capturedImageBase64,
+            name: currentUserData[2],
+            role: currentUserData[3],
+            job: jobType,
+            note: note,
+            today: `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`,
+            time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+            lat: lat,
+            long: lng,
+            address: targetLocationName,
+            user: currentUserId
+        };
 
-    fetch(CONFIG.WEB_APP_API, { method: "POST", body: JSON.stringify(payload) })
-        .then(() => {
-            Swal.fire("สำเร็จ!", "บันทึกเวลาเรียบร้อยแล้ว", "success").then(() => sendFlexMessage(payload));
-        })
-        .catch(() => Swal.fire("ข้อผิดพลาด", "ไม่สามารถบันทึกข้อมูลได้", "error"));
+        fetch(CONFIG.WEB_APP_API, { method: "POST", body: JSON.stringify(payload) })
+            .then(() => {
+                Swal.fire("สำเร็จ!", "บันทึกเวลาเรียบร้อยแล้ว", "success").then(() => sendFlexMessage(payload));
+            })
+            .catch(() => Swal.fire("ข้อผิดพลาด", "ไม่สามารถบันทึกข้อมูลได้", "error"));
+    } catch (e) {
+        Swal.fire("ข้อผิดพลาด", "กรุณาถ่ายภาพก่อนลงเวลา (ไม่พบกล้อง)", "warning");
+    }
 }
 
 function processOneClickCheckin() {
-    Swal.fire({ title: 'กำลังประมวลผล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    Swal.fire({ title: 'กำลังตรวจสอบพิกัด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
     if (cachedLocation) {
         executeCheckin(cachedLocation.latitude, cachedLocation.longitude);
@@ -320,7 +360,7 @@ function processOneClickCheckin() {
         if (!navigator.geolocation) return Swal.fire("ไม่รองรับ", "อุปกรณ์ของคุณไม่รองรับ GPS", "error");
         navigator.geolocation.getCurrentPosition(
             (pos) => { executeCheckin(pos.coords.latitude, pos.coords.longitude); },
-            (err) => { Swal.fire("เกิดข้อผิดพลาด", "กรุณาเปิด GPS (Location)", "error"); },
+            (err) => { Swal.fire("เกิดข้อผิดพลาด", "กรุณาเปิด GPS (Location) เพื่อลงเวลา", "error"); },
             { enableHighAccuracy: true, timeout: 10000 }
         );
     }
@@ -345,7 +385,6 @@ function openMapModal() {
             const userLat = pos.coords.latitude;
             const userLng = pos.coords.longitude;
 
-            // 🌟 หาหมุดที่ใกล้ที่สุดเพื่อแสดงตัวเลขแจ้งเตือน
             let nearestDistance = Infinity;
             let nearestRange = 30;
 
@@ -365,21 +404,18 @@ function openMapModal() {
             initOrUpdateMap(userLat, userLng);
         },
         (err) => {
-            Swal.fire("ข้อผิดพลาด", "กรุณาเปิด GPS", "error");
+            Swal.fire("ข้อผิดพลาด", "กรุณาเปิด GPS และอนุญาตการเข้าถึง", "error");
         }, { enableHighAccuracy: true }
     );
 }
 
-// 🌟 อัปเกรดให้วาดลงแผนที่ได้หลายวงกลม/หลายหมุด
 function initOrUpdateMap(userLat, userLng) {
     if (!leafletMap) {
-        // ใช้หมุดแรกเป็นจุดกึ่งกลางตอนเปิดแผนที่
         leafletMap = L.map('map').setView([TARGET_LOCATIONS[0].lat, TARGET_LOCATIONS[0].lng], 16);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(leafletMap);
 
-        // วาดหมุดและวงกลมของทุกสถานที่
         TARGET_LOCATIONS.forEach(loc => {
             L.circle([loc.lat, loc.lng], {
                 color: '#0f766e',
@@ -398,7 +434,6 @@ function initOrUpdateMap(userLat, userLng) {
     if (userMarker) leafletMap.removeLayer(userMarker);
     userMarker = L.marker([userLat, userLng], { icon: customIcon }).addTo(leafletMap).bindPopup("ตำแหน่งของคุณ");
 
-    // ซูมให้เห็นพิกัดของผู้ใช้เทียบกับพิกัดหมุดแรก
     const bounds = L.latLngBounds([[TARGET_LOCATIONS[0].lat, TARGET_LOCATIONS[0].lng], [userLat, userLng]]);
     leafletMap.fitBounds(bounds, { padding: [30, 30] });
 
