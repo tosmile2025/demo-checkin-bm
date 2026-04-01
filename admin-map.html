@@ -107,18 +107,56 @@
         let map;
         let locations = [];
         let currentSelectedIndex = -1;
-        let mapLayers = []; // เก็บ marker และ circle
+        let mapLayers = [];
 
-        document.addEventListener("DOMContentLoaded", async () => {
-            // เช็ครหัสผ่านแอดมินก่อน
-            if (sessionStorage.getItem('adminAuth') !== 'true') {
-                Swal.fire({
-                    title: '🔒 เข้าสู่ระบบ', input: 'password', allowOutsideClick: false, confirmButtonText: 'เข้าสู่ระบบ', confirmButtonColor: '#0f766e',
-                    preConfirm: (pwd) => { if (pwd !== '12211') { Swal.showValidationMessage('รหัสผ่านไม่ถูกต้อง!'); return false; } return true; }
-                }).then((res) => { if (res.isConfirmed) { sessionStorage.setItem('adminAuth', 'true'); initMap(); fetchSettings(); } });
-            } else {
-                initMap(); fetchSettings();
+        // ==========================================
+        // 🔒 ADMIN AUTHENTICATION
+        // ==========================================
+        function checkAdminAuth(callback) {
+            if (sessionStorage.getItem('adminAuth') === 'true') {
+                if (callback) callback();
+                return;
             }
+            Swal.fire({
+                title: '🔒 เข้าสู่ระบบผู้ดูแล',
+                input: 'password',
+                inputPlaceholder: 'กรอกรหัสผ่าน',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                confirmButtonText: 'เข้าสู่ระบบ',
+                confirmButtonColor: '#0f766e',
+                showLoaderOnConfirm: true,
+                preConfirm: async (password) => {
+                    try {
+                        const response = await fetch(CONFIG.WEB_APP_API, {
+                            method: 'POST',
+                            body: JSON.stringify({ action: 'verifyPassword', password: password })
+                        });
+                        const result = await response.json();
+
+                        if (!result.success) {
+                            Swal.showValidationMessage('รหัสผ่านไม่ถูกต้อง!');
+                            return false;
+                        }
+                        return true;
+                    } catch (error) {
+                        Swal.showValidationMessage('การเชื่อมต่อล้มเหลว โปรดลองอีกครั้ง');
+                        return false;
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    sessionStorage.setItem('adminAuth', 'true');
+                    if (callback) callback();
+                }
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            checkAdminAuth(() => {
+                initMap();
+                fetchSettings();
+            });
         });
 
         function initMap() {
@@ -152,7 +190,6 @@
             const listEl = document.getElementById('locationList');
             listEl.innerHTML = '';
 
-            // ล้างหมุดบนแผนที่
             mapLayers.forEach(layer => map.removeLayer(layer));
             mapLayers = [];
             const bounds = [];
@@ -160,18 +197,16 @@
             locations.forEach((loc, index) => {
                 const isSelected = index === currentSelectedIndex;
 
-                // สร้างรายการในแถบซ้าย
                 const item = document.createElement('div');
                 item.className = `p-3 rounded-xl border cursor-pointer transition ${isSelected ? 'bg-medical-50 border-medical-500 shadow-sm' : 'bg-white border-slate-200 hover:bg-slate-50'}`;
                 item.onclick = () => selectLocation(index);
                 item.innerHTML = `
-                <div class="font-bold text-sm ${isSelected ? 'text-medical-700' : 'text-slate-700'}">${loc.name}</div>
-                <div class="text-[10px] text-slate-500 mt-1"><i class="fas fa-map-marker-alt"></i> ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)} | รัศมี: ${loc.range}m</div>
-            `;
+            <div class="font-bold text-sm ${isSelected ? 'text-medical-700' : 'text-slate-700'}">${loc.name}</div>
+            <div class="text-[10px] text-slate-500 mt-1"><i class="fas fa-map-marker-alt"></i> ${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)} | รัศมี: ${loc.range}m</div>
+        `;
                 listEl.appendChild(item);
 
-                // สร้างหมุดบนแผนที่
-                const iconColor = isSelected ? '#0f766e' : '#64748b'; // สีเขียวถ้าเลือก สีเทาถ้าไม่เลือก
+                const iconColor = isSelected ? '#0f766e' : '#64748b';
                 const icon = L.divIcon({
                     className: 'custom-div-icon',
                     html: `<div style="background-color:${iconColor}; width:24px; height:24px; border-radius:50%; border:2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; color:white; font-size:10px;">${index + 1}</div>`,
@@ -197,7 +232,6 @@
                 bounds.push([loc.lat, loc.lng]);
             });
 
-            // ซูมให้เห็นทุกหมุดถ้าไม่มีการเลือกแบบเฉพาะเจาะจง
             if (bounds.length > 0 && currentSelectedIndex === -1) {
                 map.fitBounds(bounds, { padding: [50, 50] });
             } else if (currentSelectedIndex !== -1 && bounds.length > 0) {
