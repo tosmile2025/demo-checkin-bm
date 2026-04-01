@@ -3,6 +3,7 @@
 // ==========================================
 
 let fullData = [];
+let membersData = []; // เก็บข้อมูลสมาชิกเพื่อดึงรูปโปรไฟล์/ชั้นปี
 let filteredData = [];
 let currentPage = 1;
 let isAscending = false;
@@ -19,12 +20,10 @@ const nextBtn = document.getElementById('nextPageBtn');
 document.addEventListener('DOMContentLoaded', () => {
     fetchDataAndDisplay();
 
-    // ผูก Event Listener 
     const filterInputs = ['filterSearch', 'filterDept', 'filterIn', 'filterDuring', 'filterOut', 'startDate', 'endDate', 'startTime', 'endTime'];
     filterInputs.forEach(id => {
         document.getElementById(id).addEventListener('input', () => {
-            currentPage = 1;
-            applyFiltersAndRender();
+            currentPage = 1; applyFiltersAndRender();
         });
     });
 
@@ -43,41 +42,47 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === document.getElementById('popupModal')) closeModal();
     });
 
-    // ปุ่มส่งออก
     document.getElementById('exportCsvBtn').addEventListener('click', () => exportData('csv'));
     document.getElementById('exportTxtBtn').addEventListener('click', () => exportData('txt'));
     document.getElementById('exportTxtCustomBtn').addEventListener('click', () => exportData('custom_txt'));
 });
 
 // ==========================================
-// 📡 FETCH DATA
+// 📡 FETCH DATA (ดึงข้อมูลลงเวลา + ข้อมูลนิสิต)
 // ==========================================
 async function fetchDataAndDisplay() {
     try {
-        const response = await fetch(CONFIG.WEB_APP_API, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'fetchData' })
-        });
-        if (!response.ok) throw new Error('Network response was not ok');
+        // ยิง API 2 ตัวพร้อมกันเพื่อความรวดเร็ว
+        const [checkinRes, memberRes] = await Promise.all([
+            fetch(CONFIG.WEB_APP_API, { method: 'POST', body: JSON.stringify({ action: 'fetchData' }) }),
+            fetch(CONFIG.WEB_APP_API, { method: 'POST', body: JSON.stringify({ action: 'fetchData', source: 'member' }) })
+        ]);
 
-        const rawData = await response.json();
+        if (!checkinRes.ok || !memberRes.ok) throw new Error('Network response error');
+
+        const rawData = await checkinRes.json();
+        const rawMembers = await memberRes.json();
 
         if (!Array.isArray(rawData) || rawData.length <= 1) {
-            tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-500 font-medium">ไม่มีข้อมูลในระบบ</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-16 text-slate-500 text-lg font-medium">ไม่มีข้อมูลในระบบ</td></tr>';
             rowsInfo.textContent = 'ไม่พบข้อมูล';
             return;
         }
+
         fullData = rawData.slice(1);
+        membersData = Array.isArray(rawMembers) ? rawMembers.slice(1) : []; // เก็บไว้สำหรับอ้างอิงรูปและชั้นปี
+
         applyFiltersAndRender();
 
     } catch (error) {
-        tableBody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-rose-500 font-bold"><i class="fas fa-exclamation-circle text-2xl mb-2 block"></i>เกิดข้อผิดพลาดในการโหลดข้อมูล</td></tr>`;
+        console.error(error);
+        tableBody.innerHTML = `<tr><td colspan="7" class="text-center py-16 text-rose-500 font-bold text-lg"><i class="fas fa-exclamation-circle text-3xl mb-3 block"></i>เกิดข้อผิดพลาดในการโหลดข้อมูล</td></tr>`;
         rowsInfo.textContent = 'Error';
     }
 }
 
 // ==========================================
-// 📅 DATE FORMATTER (แปลง ISO -> ไทย)
+// 📅 DATE FORMATTER (แปลง ISO -> ไทย แบบฉลาด)
 // ==========================================
 function parseAndFormatDate(dateStr, timeStr) {
     if (!dateStr || dateStr === "-") return { date: "-", time: "-" };
@@ -128,15 +133,15 @@ function parseDateTimeForSort(dateStr, timeStr) {
 // ==========================================
 function setSorting(asc, btnElement) {
     isAscending = asc;
-    document.getElementById('sortDescBtn').className = "px-4 py-2 text-sm font-bold bg-white text-slate-500 hover:bg-slate-50 transition";
-    document.getElementById('sortAscBtn').className = "px-4 py-2 text-sm font-bold bg-white text-slate-500 hover:bg-slate-50 transition";
-    btnElement.className = "px-4 py-2 text-sm font-bold bg-slate-100 text-slate-800 transition";
+    document.getElementById('sortDescBtn').className = "px-5 py-2.5 text-sm font-bold bg-white text-slate-500 hover:bg-slate-50 transition";
+    document.getElementById('sortAscBtn').className = "px-5 py-2.5 text-sm font-bold bg-white text-slate-500 hover:bg-slate-50 transition";
+    btnElement.className = "px-5 py-2.5 text-sm font-bold bg-slate-100 text-slate-800 transition";
     applyFiltersAndRender();
 }
 
 function applyFiltersAndRender() {
     const searchVal = document.getElementById('filterSearch').value.toLowerCase();
-    const deptVal = document.getElementById('filterDept').value.toLowerCase();
+    const deptVal = document.getElementById('filterDept').value; // ชั้นปี
     const showIn = document.getElementById('filterIn').checked;
     const showDuring = document.getElementById('filterDuring').checked;
     const showOut = document.getElementById('filterOut').checked;
@@ -150,15 +155,21 @@ function applyFiltersAndRender() {
     const endDateObj = ed ? new Date(ed) : null;
 
     filteredData = fullData.filter(item => {
-        const rowString = item.join(' ').toLowerCase(); // ใช้ join ค้นหาครอบคลุมเผื่อชั้นปีหลบอยู่ในช่องต่างๆ
+        // [2]ชื่อ, [3]รหัส, [4]เข้า/ออก, [11]UserId
         const name = (item[2] || '').toLowerCase();
         const empId = (item[3] || '').toString().toLowerCase();
         const status = item[4] || '';
+        const userId = item[11] || '';
+
+        // ดึงข้อมูลชั้นปีจากฐานสมาชิกมาอ้างอิงในการกรอง
+        const member = membersData.find(m => m[1] === userId);
+        const dept = member ? String(member[4] || '') : '';
+
         const f = parseAndFormatDate(item[6], item[7]);
 
         // 1. ค้นหา
         if (searchVal && !name.includes(searchVal) && !empId.includes(searchVal)) return false;
-        if (deptVal && !rowString.includes(deptVal)) return false; // กรองชั้นปีจากทั้ง Row
+        if (deptVal && !dept.includes(deptVal)) return false;
 
         // 2. สถานะ
         const matchIn = showIn && status === 'เข้างาน';
@@ -166,20 +177,20 @@ function applyFiltersAndRender() {
         const matchOut = showOut && status === 'ออกงาน';
         if (!matchIn && !matchDuring && !matchOut) return false;
 
-        // 3. วันที่
+        // 3. วันที่ & เวลา
         if (startDateObj || endDateObj) {
             const itemDateObj = f.rawDateObj;
             if (startDateObj && itemDateObj < startDateObj) return false;
             if (endDateObj && itemDateObj > endDateObj) return false;
         }
-
-        // 4. เวลา
         if (st || et) {
             if (f.time === "-") return false;
             if (st && f.time < st) return false;
             if (et && f.time > et) return false;
         }
 
+        // แนบข้อมูล member ใส่ไปใน item ชั่วคราวเพื่อเอาไปใช้ตอน Render
+        item._memberData = member;
         return true;
     });
 
@@ -212,58 +223,69 @@ function renderTable() {
     const pageData = filteredData.slice(startIdx, startIdx + perPage);
 
     if (pageData.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-500 font-medium">ไม่พบข้อมูลที่ตรงกับตัวกรอง</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-16 text-slate-500 text-base font-medium">ไม่พบข้อมูลที่ตรงกับตัวกรอง</td></tr>';
         rowsInfo.textContent = 'ไม่พบข้อมูล';
         prevBtn.disabled = true; nextBtn.disabled = true;
         return;
     }
 
     pageData.forEach((item, index) => {
-        const imgUrl = item[1] || 'https://via.placeholder.com/40';
+        // จัดการรูปภาพ (ดึงจาก Member และ Checkin)
+        const checkinImgUrl = item[1] || 'https://via.placeholder.com/40';
+        const profileImgUrl = item._memberData && item._memberData[5] ? item._memberData[5] : 'https://via.placeholder.com/40';
+        const dept = item._memberData ? item._memberData[4] : '-';
+
         const styles = getStatusStyle(item[4]);
         const f = parseAndFormatDate(item[6], item[7]);
 
-        // จัดการคอลัมน์ความล่าช้า (แดง/ส้ม)
+        // จัดการความล่าช้า (+15 น. แดง / -10 น. ส้ม)
         const statusDetail = item[12] || 'ปกติ';
         const minutes = item[13] || '';
         let lateHtml = '-';
         if (statusDetail === 'สาย') {
-            lateHtml = `<span class="bg-rose-50 text-rose-600 font-bold px-2 py-1 rounded text-xs border border-rose-100">+${minutes} น.</span>`;
+            lateHtml = `<span class="bg-rose-50 text-rose-600 font-bold px-2.5 py-1.5 rounded text-sm border border-rose-200 shadow-sm">+${minutes} น.</span>`;
         } else if (statusDetail === 'ออกก่อนเวลา') {
-            lateHtml = `<span class="bg-orange-50 text-orange-600 font-bold px-2 py-1 rounded text-xs border border-orange-100">-${minutes} น.</span>`;
+            lateHtml = `<span class="bg-orange-50 text-orange-600 font-bold px-2.5 py-1.5 rounded text-sm border border-orange-200 shadow-sm">-${minutes} น.</span>`;
         } else if (statusDetail === 'ตรงเวลา') {
-            lateHtml = `<span class="text-emerald-500 font-bold text-xs"><i class="fas fa-check-circle"></i> ตรงเวลา</span>`;
+            lateHtml = `<span class="text-emerald-500 font-bold text-sm"><i class="fas fa-check-circle mr-1"></i> ตรงเวลา</span>`;
         }
 
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-slate-50 transition border-b border-slate-50/50';
 
         tr.innerHTML = `
-            <td class="px-4 py-3 text-center">
-                <div class="relative inline-block cursor-pointer hover:opacity-80 transition" onclick="openLightbox('${imgUrl}')">
-                    <img src="${imgUrl}" class="h-10 w-10 rounded-full object-cover shadow-sm bg-white border border-slate-200">
-                    <div class="status-dot ${styles.dot}"></div>
+            <td class="px-4 py-3 text-center w-32">
+                <div class="flex items-center justify-center gap-1.5">
+                    <div class="relative cursor-pointer group" onclick="openLightbox('${profileImgUrl}')" title="รูปโปรไฟล์ตอนลงทะเบียน">
+                        <img src="${profileImgUrl}" class="h-10 w-10 rounded-full object-cover shadow-sm bg-white border border-slate-200 group-hover:opacity-80 transition">
+                        <div class="absolute -bottom-1 -left-1 bg-slate-700 text-white text-[8px] px-1 rounded">โปรไฟล์</div>
+                    </div>
+                    <div class="relative cursor-pointer group" onclick="openLightbox('${checkinImgUrl}')" title="รูปตอนลงเวลา">
+                        <img src="${checkinImgUrl}" class="h-10 w-10 rounded-full object-cover shadow-sm bg-white border-2 border-medical-300 group-hover:opacity-80 transition">
+                        <div class="status-dot ${styles.dot}"></div>
+                        <div class="absolute -bottom-1 -right-1 bg-medical-600 text-white text-[8px] px-1 rounded">ล่าสุด</div>
+                    </div>
                 </div>
             </td>
-            <td class="px-4 py-3">
-                <div class="font-bold text-slate-800 text-sm truncate">${item[2] || 'ไม่ระบุชื่อ'}</div>
-                <div class="text-[11px] font-medium text-slate-500 mt-0.5">ID: ${item[3] || '-'}</div>
+            <td class="px-4 py-4">
+                <div class="font-bold text-slate-800 text-base truncate mb-0.5">${item[2] || 'ไม่ระบุชื่อ'}</div>
+                <div class="text-sm font-medium text-slate-500">รหัสนิสิต: ${item[3] || '-'} <span class="ml-1 text-medical-600 bg-medical-50 px-1.5 py-0.5 rounded text-xs border border-medical-100">ปี ${dept}</span></div>
             </td>
-            <td class="px-4 py-3 hidden sm:table-cell">
-                <span class="px-2.5 py-1 text-[11px] font-bold rounded-md border ${styles.badge}">${item[4] || '-'}</span>
+            <td class="px-4 py-4 hidden sm:table-cell">
+                <span class="px-3 py-1.5 text-xs font-bold rounded-lg border ${styles.badge}">${item[4] || '-'}</span>
             </td>
-            <td class="px-4 py-3 hidden sm:table-cell">
+            <td class="px-4 py-4 hidden md:table-cell text-center">
                 ${lateHtml}
             </td>
-            <td class="px-4 py-3 hidden md:table-cell">
-                <div class="text-xs font-bold text-slate-700">${f.date}</div>
-                <div class="text-[11px] font-medium text-medical-600">${f.time} น.</div>
+            <td class="px-4 py-4 hidden lg:table-cell">
+                <div class="text-sm font-bold text-slate-700">${f.date}</div>
+                <div class="text-xs font-bold text-medical-600 mt-0.5">${f.time} น.</div>
             </td>
-            <td class="px-4 py-3 hidden lg:table-cell">
-                <div class="text-[11px] font-medium text-slate-600 truncate max-w-[150px] bg-slate-50 px-2 py-1 rounded border border-slate-100">${item[5] && item[5] !== '-' ? item[5] : 'ไม่มี'}</div>
+            <td class="px-4 py-4 hidden xl:table-cell">
+                <div class="text-xs font-medium text-slate-600 truncate max-w-[150px] bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">${item[5] && item[5] !== '-' ? item[5] : 'ไม่มี'}</div>
             </td>
-            <td class="px-4 py-3 text-center">
-                <button class="view-btn text-medical-700 bg-medical-50 border border-medical-100 hover:bg-medical-100 hover:text-medical-800 p-2 rounded-lg transition" data-index="${startIdx + index}">
+            <td class="px-4 py-4 text-center">
+                <button class="view-btn text-medical-700 bg-medical-50 border border-medical-100 hover:bg-medical-100 hover:text-medical-800 p-2.5 rounded-xl transition shadow-sm" data-index="${startIdx + index}">
                     <i class="fas fa-search-plus"></i> <span class="text-xs font-bold ml-1 sm:hidden">ดู</span>
                 </button>
             </td>
@@ -288,25 +310,28 @@ const modalContent = document.getElementById('popupContent');
 
 function openModal(item) {
     const f = parseAndFormatDate(item[6], item[7]);
-    const imgUrl = item[1] || 'https://via.placeholder.com/100';
 
-    document.getElementById('modalImg').src = imgUrl;
+    // รูปภาพ 2 รูป
+    document.getElementById('modalCheckinImg').src = item[1] || 'https://via.placeholder.com/100';
+    document.getElementById('modalProfileImg').src = item._memberData && item._memberData[5] ? item._memberData[5] : 'https://via.placeholder.com/100';
+
     document.getElementById('modalName').textContent = item[2] || 'ไม่ระบุชื่อ';
-    document.getElementById('modalId').textContent = `รหัส: ${item[3] || '-'}`;
+    document.getElementById('modalId').textContent = `รหัส: ${item[3] || '-'} | ชั้นปี: ${item._memberData ? item._memberData[4] : '-'}`;
 
     const styles = getStatusStyle(item[4]);
     const statusEl = document.getElementById('modalStatus');
-    statusEl.className = `font-bold px-2.5 py-1 rounded-md text-xs border ${styles.badge}`;
+    statusEl.className = `font-bold px-3 py-1.5 rounded-lg text-sm border ${styles.badge}`;
     statusEl.textContent = item[4] || '-';
 
-    document.getElementById('modalDateTime').innerHTML = `${f.date} <span class="text-medical-600 ml-1">${f.time} น.</span>`;
+    document.getElementById('modalDateTime').innerHTML = `${f.date} <span class="text-medical-600 ml-1.5">${f.time} น.</span>`;
 
+    // ความล่าช้าใน Modal
     const statusDetail = item[12] || 'ปกติ';
     const minutes = item[13] || '';
     let delayHtml = "-";
-    if (statusDetail === 'สาย') delayHtml = `<span class="text-rose-600 font-bold bg-rose-50 px-2 py-1 rounded">+${minutes} นาที</span>`;
-    else if (statusDetail === 'ออกก่อนเวลา') delayHtml = `<span class="text-orange-500 font-bold bg-orange-50 px-2 py-1 rounded">-${minutes} นาที</span>`;
-    else if (statusDetail === 'ตรงเวลา') delayHtml = `<span class="text-emerald-600 font-bold">ตรงเวลา</span>`;
+    if (statusDetail === 'สาย') delayHtml = `<span class="text-rose-600 font-bold bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-100 shadow-sm">+${minutes} นาที</span>`;
+    else if (statusDetail === 'ออกก่อนเวลา') delayHtml = `<span class="text-orange-600 font-bold bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100 shadow-sm">-${minutes} นาที</span>`;
+    else if (statusDetail === 'ตรงเวลา') delayHtml = `<span class="text-emerald-600 font-bold"><i class="fas fa-check-circle"></i> ตรงเวลา</span>`;
 
     document.getElementById('modalDelay').innerHTML = delayHtml;
     document.getElementById('modalLocation').textContent = item[8] || 'ไม่มีข้อมูลสถานที่';
