@@ -164,23 +164,35 @@
 
         <div class="space-y-4">
           <input type="hidden" id="reg-lineId">
-          <div><label class="block text-xs font-bold text-slate-500 mb-1.5 ml-1">ชื่อ - นามสกุล <span
-                class="text-rose-500">*</span></label><input type="text" id="reg-name"
-              class="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-sm focus:border-medical-500 outline-none transition font-medium"
-              placeholder="เช่น นายแพทย์ใจดี รักษา"></div>
-          <div><label class="block text-xs font-bold text-slate-500 mb-1.5 ml-1">รหัสประจำตัวนิสิต <span
-                class="text-rose-500">*</span></label><input type="tel" id="reg-empId"
-              class="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-sm focus:border-medical-500 outline-none transition font-medium"
-              placeholder="เช่น 6401001"></div>
           <div>
-            <label class="block text-xs font-bold text-slate-500 mb-1.5 ml-1">ชั้นปี <span
+            <label class="block text-xs font-bold text-slate-500 mb-1.5 ml-1">ชื่อ - นามสกุล <span
+                class="text-rose-500">*</span></label>
+            <input type="text" id="reg-name"
+              class="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-sm focus:border-medical-500 outline-none transition font-medium"
+              placeholder="เช่น นพ.ใจดี รักษา">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1.5 ml-1">รหัสประจำตัว (ถ้ามี) <span
+                class="text-rose-500">*</span></label>
+            <input type="tel" id="reg-empId"
+              class="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-sm focus:border-medical-500 outline-none transition font-medium"
+              placeholder="เช่น 6401001 หรือ 0000">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1.5 ml-1">ตำแหน่ง / ชั้นปี <span
                 class="text-rose-500">*</span></label>
             <select id="reg-dept"
               class="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-sm focus:border-medical-500 outline-none transition font-medium text-slate-700">
-              <option value="" disabled selected>-- เลือกชั้นปี --</option>
-              <option value="4">ชั้นปีที่ 4</option>
-              <option value="5">ชั้นปีที่ 5</option>
-              <option value="6">ชั้นปีที่ 6</option>
+              <option value="" disabled selected>-- เลือกตำแหน่ง / ชั้นปี --</option>
+              <option value="นพท. ปี 4">นิสิตแพทย์ ชั้นปีที่ 4</option>
+              <option value="นพท. ปี 5">นิสิตแพทย์ ชั้นปีที่ 5</option>
+              <option value="นพท. ปี 6">นิสิตแพทย์ ชั้นปีที่ 6</option>
+              <option value="แพทย์เพิ่มพูนทักษะ">แพทย์เพิ่มพูนทักษะ (Intern)</option>
+              <option value="แพทย์ใช้ทุน">แพทย์ใช้ทุน</option>
+              <option value="แพทย์พี่เลี้ยง">แพทย์พี่เลี้ยง</option>
+              <option value="แพทย์ประจำบ้าน">แพทย์ประจำบ้าน (Resident)</option>
+              <option value="อาจารย์แพทย์">อาจารย์แพทย์ (Staff)</option>
+              <option value="เจ้าหน้าที่อื่นๆ">เจ้าหน้าที่อื่นๆ</option>
             </select>
           </div>
         </div>

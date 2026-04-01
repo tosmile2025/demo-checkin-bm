@@ -269,6 +269,9 @@ function renderTable() {
         return;
     }
 
+    // 🌟 ใช้ DocumentFragment เพื่อความเร็วขั้นสุด (อัปเดต DOM แค่รอบเดียว)
+    const fragment = document.createDocumentFragment();
+
     pageData.forEach((item, index) => {
         let checkinImgUrl = item[1];
         if (!checkinImgUrl || String(checkinImgUrl).trim() === "" || !String(checkinImgUrl).startsWith("http")) checkinImgUrl = DEFAULT_AVATAR;
@@ -277,7 +280,6 @@ function renderTable() {
         if (!profileImgUrl || String(profileImgUrl).trim() === "" || !String(profileImgUrl).startsWith("http")) profileImgUrl = DEFAULT_AVATAR;
 
         const dept = item._memberData ? item._memberData[4] : '-';
-
         const styles = getStatusStyle(item[4]);
         const f = parseAndFormatDate(item[6], item[7]);
 
@@ -298,7 +300,7 @@ function renderTable() {
         tr.innerHTML = `
             <td class="px-4 py-3 text-center w-32">
                 <div class="flex items-center justify-center gap-1.5">
-                    <div class="relative cursor-pointer group" onclick="openLightbox('${profileImgUrl}')" title="รูปโปรไฟล์ตอนลงทะเบียน">
+                    <div class="relative cursor-pointer group" onclick="openLightbox('${profileImgUrl}')" title="รูปโปรไฟล์">
                         <img src="${profileImgUrl}" class="h-10 w-10 rounded-full object-cover shadow-sm bg-white border border-slate-200 group-hover:opacity-80 transition">
                         <div class="absolute -bottom-1 -left-1 bg-slate-700 text-white text-[8px] px-1 rounded">โปรไฟล์</div>
                     </div>
@@ -311,7 +313,7 @@ function renderTable() {
             </td>
             <td class="px-4 py-4">
                 <div class="font-bold text-slate-800 text-base truncate mb-0.5">${item[2] || 'ไม่ระบุชื่อ'}</div>
-                <div class="text-sm font-medium text-slate-500">รหัสนิสิต: ${item[3] || '-'} <span class="ml-1 text-medical-600 bg-medical-50 px-1.5 py-0.5 rounded text-xs border border-medical-100">ปี ${dept}</span></div>
+                <div class="text-sm font-medium text-slate-500">รหัส: ${item[3] || '-'} <span class="ml-1 text-medical-600 bg-medical-50 px-1.5 py-0.5 rounded text-xs border border-medical-100">${dept}</span></div>
             </td>
             <td class="px-4 py-4 hidden sm:table-cell">
                 <span class="px-3 py-1.5 text-xs font-bold rounded-lg border ${styles.badge}">${item[4] || '-'}</span>
@@ -336,8 +338,10 @@ function renderTable() {
         tr.querySelector('.view-btn').addEventListener('click', function () {
             openModal(filteredData[this.getAttribute('data-index')]);
         });
-        tableBody.appendChild(tr);
+        fragment.appendChild(tr); // นำแถวไปใส่ในตระกร้า Fragment ก่อน
     });
+
+    tableBody.appendChild(fragment); // เทตระกร้าลงตารางทีเดียว (เร็วมาก)
 
     rowsInfo.textContent = `แสดง ${startIdx + 1}-${Math.min(startIdx + perPage, filteredData.length)} จาก ${filteredData.length} รายการ`;
     prevBtn.disabled = currentPage === 1;

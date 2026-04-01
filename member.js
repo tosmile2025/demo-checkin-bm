@@ -69,13 +69,14 @@ function renderTable() {
         return;
     }
 
+    const fragment = document.createDocumentFragment(); // 🌟 อัปเกรดความเร็ว
+
     pageData.forEach((row) => {
         const id = row[0] || "-";
         const name = row[2] || "ไม่ระบุชื่อ";
         const empCode = row[3] || "-";
         const dept = row[4] || "-";
 
-        // 🌟 แก้ไขบัครูปภาพ: ใช้รูป Default ถ้า URL ไม่ถูกต้อง
         let imgUrl = row[5];
         if (!imgUrl || String(imgUrl).trim() === "" || !String(imgUrl).startsWith("http")) {
             imgUrl = DEFAULT_AVATAR;
@@ -106,7 +107,7 @@ function renderTable() {
                 </div>
             </td>
             <td class="py-4 px-5 text-center">
-                <span class="inline-block px-3 py-1 text-xs rounded-lg font-bold bg-medical-50 text-medical-700 border border-medical-100">ปี ${dept}</span>
+                <span class="inline-block px-3 py-1 text-xs rounded-lg font-bold bg-medical-50 text-medical-700 border border-medical-100">${dept}</span>
             </td>
             <td class="py-4 px-5 text-center">
                 <div class="flex justify-center gap-2">
@@ -118,9 +119,10 @@ function renderTable() {
 
         tr.querySelector('.edit-btn').onclick = () => openEditModal(row);
         tr.querySelector('.delete-btn').onclick = (e) => confirmDelete(id, e.target);
-        document.querySelector("#data-table tbody").appendChild(tr);
+        fragment.appendChild(tr);
     });
 
+    document.querySelector("#data-table tbody").appendChild(fragment); // เทข้อมูลลงรวดเดียว
     setupPagination();
 }
 
