@@ -400,26 +400,39 @@ async function sendFlexMessage(data) {
             body: {
                 type: "box", layout: "vertical", spacing: "md",
                 contents: [
-                    // ส่วนหัว: สถานะการลงเวลา
+                    { type: "box", layout: "horizontal", contents: [{ type: "text", text: "บันทึกเวลาปฏิบัติงาน", weight: "bold", size: "md", color: "#1e293b" }, { type: "text", text: data.job, weight: "bold", size: "md", color: jobColor, align: "end" }] },
+                    { type: "separator" },
+                    // 🌟 รหัสนิสิต และ ชื่อ-นามสกุล รวมอยู่ในบรรทัดเดียวกัน
                     {
-                        type: "box", layout: "horizontal", contents: [
-                            { type: "text", text: "บันทึกเวลา", weight: "bold", size: "md", color: "#1e293b" },
-                            { type: "text", text: data.job, weight: "bold", size: "md", color: jobColor, align: "end" }
+                        type: "box", layout: "vertical", spacing: "sm", contents: [
+                            {
+                                type: "box", layout: "baseline", contents: [
+                                    { type: "text", text: "ผู้บันทึก", weight: "bold", size: "sm", color: "#64748b", flex: 2 },
+                                    { type: "text", text: `${data.role} ${data.name}`, size: "sm", align: "end", color: "#0f172a", flex: 5, weight: "bold", wrap: true }
+                                ]
+                            }
                         ]
                     },
                     { type: "separator" },
-                    // ส่วนข้อมูล: ใช้ displayThaiDate ที่เราแปลงไว้
+                    // วันที่และเวลา
                     {
                         type: "box", layout: "vertical", contents: [
-                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "วันที่", weight: "bold", color: "#64748b" }, { type: "text", text: displayThaiDate, weight: "bold", align: "end", color: "#0f172a" }] },
-                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "เวลา", weight: "bold", color: "#64748b" }, { type: "text", text: data.time + " น.", weight: "bold", size: "xl", color: jobColor, align: "end" }] }
+                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "วันที่", weight: "bold", color: "#64748b", flex: 2 }, { type: "text", text: displayThaiDate, weight: "bold", align: "end", color: "#0f172a", flex: 5 }] },
+                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "เวลา", weight: "bold", color: "#64748b", flex: 2 }, { type: "text", text: data.time + " น.", weight: "bold", size: "xl", color: jobColor, align: "end", flex: 5 }] }
+                        ]
+                    },
+                    { type: "separator" },
+                    // สถานที่
+                    {
+                        type: "box", layout: "vertical", spacing: "xs", contents: [
+                            { type: "text", text: "สถานที่", weight: "bold", size: "xs", color: "#64748b" },
+                            { type: "text", text: data.address || "ตรวจสอบพิกัดสำเร็จ", wrap: true, size: "xs", color: "#475569" }
                         ]
                     }
                 ]
             }
         }
     };
-
-    try { await liff.sendMessages([flexMsg]); } catch (e) { console.error("LIFF sendMessages error", e); }
+    try { await liff.sendMessages([flexMsg]); } catch (e) { console.error(e); }
     liff.closeWindow();
 }
