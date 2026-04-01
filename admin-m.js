@@ -8,7 +8,7 @@ let membersData = [];
 let currentFilter = 'all';
 
 // ==========================================
-// 🔒 ADMIN AUTHENTICATION
+// 🔒 ADMIN AUTHENTICATION (อัปเกรดดึงรหัสจาก Sheet)
 // ==========================================
 function checkAdminAuth(callback) {
     if (sessionStorage.getItem('adminAuth') === 'true') {
@@ -23,9 +23,25 @@ function checkAdminAuth(callback) {
         allowEscapeKey: false,
         confirmButtonText: 'เข้าสู่ระบบ',
         confirmButtonColor: '#0f766e',
-        preConfirm: (password) => {
-            if (password !== '12211') { Swal.showValidationMessage('รหัสผ่านไม่ถูกต้อง!'); return false; }
-            return true;
+        showLoaderOnConfirm: true, // แสดงสถานะโหลดตอนกำลังตรวจรหัส
+        preConfirm: async (password) => {
+            try {
+                // 🌟 ยิง API ไปเช็ครหัสผ่านกับ Google Sheet
+                const response = await fetch(CONFIG.WEB_APP_API, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'verifyPassword', password: password })
+                });
+                const result = await response.json();
+
+                if (!result.success) {
+                    Swal.showValidationMessage('รหัสผ่านไม่ถูกต้อง!');
+                    return false;
+                }
+                return true;
+            } catch (error) {
+                Swal.showValidationMessage('การเชื่อมต่อล้มเหลว โปรดลองอีกครั้ง');
+                return false;
+            }
         }
     }).then((result) => {
         if (result.isConfirmed) {
