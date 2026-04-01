@@ -7,9 +7,40 @@ let fullData = [];
 let membersData = [];
 let currentFilter = 'all';
 
+// ==========================================
+// 🔒 ADMIN AUTHENTICATION
+// ==========================================
+function checkAdminAuth(callback) {
+    if (sessionStorage.getItem('adminAuth') === 'true') {
+        if (callback) callback();
+        return;
+    }
+    Swal.fire({
+        title: '🔒 เข้าสู่ระบบผู้ดูแล',
+        input: 'password',
+        inputPlaceholder: 'กรอกรหัสผ่าน',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        confirmButtonText: 'เข้าสู่ระบบ',
+        confirmButtonColor: '#0f766e',
+        preConfirm: (password) => {
+            if (password !== '12211') { Swal.showValidationMessage('รหัสผ่านไม่ถูกต้อง!'); return false; }
+            return true;
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            sessionStorage.setItem('adminAuth', 'true');
+            if (callback) callback();
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    fetchDataAndDisplay();
-    document.getElementById('searchInput').addEventListener('input', renderCards);
+    // บังคับกรอกรหัสก่อนโหลดข้อมูล
+    checkAdminAuth(() => {
+        fetchDataAndDisplay();
+        document.getElementById('searchInput').addEventListener('input', renderCards);
+    });
 });
 
 // ==========================================

@@ -349,5 +349,36 @@ function applyFilters() {
 document.getElementById("filter-search").addEventListener("input", applyFilters);
 document.getElementById("filter-year").addEventListener("change", applyFilters);
 
-// โหลดข้อมูลเมื่อเปิดหน้า
-window.onload = fetchData;
+
+// ==========================================
+// 🔒 ADMIN AUTHENTICATION
+// ==========================================
+function checkAdminAuth(callback) {
+    if (sessionStorage.getItem('adminAuth') === 'true') {
+        if (callback) callback();
+        return;
+    }
+    Swal.fire({
+        title: '🔒 เข้าสู่ระบบผู้ดูแล',
+        input: 'password',
+        inputPlaceholder: 'กรอกรหัสผ่าน',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        confirmButtonText: 'เข้าสู่ระบบ',
+        confirmButtonColor: '#0f766e',
+        preConfirm: (password) => {
+            if (password !== '12211') { Swal.showValidationMessage('รหัสผ่านไม่ถูกต้อง!'); return false; }
+            return true;
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            sessionStorage.setItem('adminAuth', 'true');
+            if (callback) callback();
+        }
+    });
+}
+
+// โหลดข้อมูลเมื่อเปิดหน้า (ผ่านการตรวจสอบรหัส)
+window.onload = () => {
+    checkAdminAuth(fetchData);
+};
