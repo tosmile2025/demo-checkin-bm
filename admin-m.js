@@ -36,10 +36,10 @@ function checkAdminAuth(callback) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // บังคับกรอกรหัสก่อนโหลดข้อมูล
     checkAdminAuth(() => {
         fetchDataAndDisplay();
         document.getElementById('searchInput').addEventListener('input', renderCards);
+        document.getElementById('filterDate').addEventListener('change', renderCards); // 🌟 ฟังเหตุการณ์กรองวันที่
     });
 });
 
@@ -122,20 +122,41 @@ function renderCards() {
     const listEl = document.getElementById('dataList');
     listEl.innerHTML = '';
     const searchVal = document.getElementById('searchInput').value.toLowerCase();
+    const filterDate = document.getElementById('filterDate').value; // ค่าจะเป็นรูปแบบ YYYY-MM-DD
 
     let count = 0;
-    fullData.forEach((item, index) => {
+    fullData.forEach((item) => {
         const name = String(item[2] || '').toLowerCase();
         const empId = String(item[3] || '').toLowerCase();
         const status = item[4] || '';
         const statusDetail = item[12] || 'ปกติ';
 
+        // 1. กรองคำค้นหา
         if (searchVal && !name.includes(searchVal) && !empId.includes(searchVal)) return;
 
+        // 2. กรองแท็บ
         if (currentFilter !== 'all') {
             if (currentFilter === 'late') {
                 if (statusDetail !== 'สาย' && statusDetail !== 'ออกก่อนเวลา') return;
             } else if (status !== currentFilter) return;
+        }
+
+        // 🌟 3. กรองวันที่
+        if (filterDate) {
+            let itemDateStr = "";
+            const safeDateStr = String(item[6]).trim();
+            if (safeDateStr.includes("T")) {
+                itemDateStr = safeDateStr.split('T')[0]; // ตัดเอาแค่ YYYY-MM-DD
+            } else if (safeDateStr.includes("/")) {
+                const parts = safeDateStr.split('/'); // DD/MM/YYYY
+                if (parts.length === 3) {
+                    const d = parts[0].padStart(2, '0');
+                    const m = parts[1].padStart(2, '0');
+                    const y = parts[2];
+                    itemDateStr = `${y}-${m}-${d}`;
+                }
+            }
+            if (itemDateStr !== filterDate) return; // ถ้าระบุวันที่แล้วไม่ตรง ให้ข้ามเลย
         }
 
         count++;
@@ -155,7 +176,6 @@ function renderCards() {
         const f = formatThai(item[6], item[7]);
         const minutes = item[13] || '';
 
-        // 🌟 ขยายขนาด Badge ป้ายสถานะในการ์ด
         let badgeClass = "bg-slate-100 text-slate-600";
         if (status === 'เข้าเวร') badgeClass = "bg-medical-50 text-medical-600 border border-medical-100";
         if (status === 'ออกเวร') badgeClass = "bg-rose-50 text-rose-600 border border-rose-100";
@@ -169,7 +189,6 @@ function renderCards() {
         }
 
         const card = document.createElement('div');
-        // 🌟 ขยาย Padding และระยะห่างของการ์ด
         card.className = "bg-white p-4 rounded-2xl shadow-sm border border-slate-100 mb-4 flex items-center gap-4 active:bg-slate-50 transition cursor-pointer";
         card.onclick = () => openModal(item);
 
@@ -183,7 +202,7 @@ function renderCards() {
                     <h3 class="font-bold text-base text-slate-800 truncate pr-2">${item[2]}</h3>
                     <div class="text-xs font-bold text-medical-600 flex-shrink-0 mt-0.5">${f.t}</div>
                 </div>
-                <div class="text-xs text-slate-500 font-medium mt-1">รหัส: ${item[3]}</div>
+                <div class="text-xs text-slate-500 font-medium mt-1">รหัส: ${item[3]} | ${f.d}</div>
                 <div class="flex items-center mt-2">
                     <span class="px-2.5 py-0.5 rounded text-[11px] font-bold ${badgeClass}">${status}</span>
                     ${lateHtml}

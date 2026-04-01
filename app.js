@@ -93,11 +93,13 @@ async function checkUserStatus(userId) {
         if (userRows.length > 0) {
             userRows.sort((a, b) => new Date(b[6]) - new Date(a[6]));
             currentUserData = userRows[0];
-            setupCheckinView();
+
+            // 🌟 ให้สลับหน้าจอให้เสร็จก่อนค่อยเปิดกล้อง (แก้บัค Android ค้าง)
             switchView('checkinView');
+            setTimeout(() => { setupCheckinView(); }, 500);
         } else {
-            setupRegisterView();
             switchView('registerView');
+            setTimeout(() => { setupRegisterView(); }, 500);
         }
     } catch (error) {
         Swal.fire("ข้อผิดพลาด", "เชื่อมต่อฐานข้อมูลล้มเหลว กรุณาลองใหม่", "error");
@@ -165,6 +167,7 @@ function captureOptimizedFrame(mode) {
 let capturedRegImage = null;
 
 function setupRegisterView() {
+    // โหลดกล้องหลังจากหน้าจอแสดงแล้ว
     startCamera('reg');
     const captureBtn = document.getElementById('reg-capture-btn');
     const retakeBtn = document.getElementById('reg-retake-btn');
@@ -234,6 +237,7 @@ function setupCheckinView() {
         document.getElementById('chk-profile-img').src = currentUserData[5];
     }
 
+    // โหลดกล้องและ GPS หลังจากหน้าจอแสดงแล้ว
     startCamera('chk');
     startBackgroundGPS();
 
