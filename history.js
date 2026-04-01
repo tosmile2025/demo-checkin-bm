@@ -32,21 +32,22 @@ async function initializeLiff() {
 }
 
 // ==========================================
-// 📡 FETCH DATA (ดึงข้อมูลทีละคิว ป้องกัน Google บล็อก)
+// 📡 FETCH DATA (ดึงข้อมูลทีละคิว + ป้องกัน Error API)
 // ==========================================
 async function loadUserDataAndHistory() {
     const tableBody = document.getElementById('data-table');
     tableBody.innerHTML = `<tr><td colspan="3" class="py-10 text-center text-slate-400"><div class="animate-spin rounded-full h-8 w-8 border-2 border-medical-200 border-t-medical-600 mx-auto mb-3"></div>กำลังโหลดข้อมูล...</td></tr>`;
 
     try {
-        // 🌟 1. ยิง API ดึงข้อมูลส่วนตัวก่อน
+        // 🌟 1. ดึงข้อมูลส่วนตัว (สมาชิก)
         const memberRes = await fetch(CONFIG.WEB_APP_API, {
             method: 'POST',
             body: JSON.stringify({ action: 'fetchData', source: 'member', userId: currentUserId })
         });
-        const memberData = await memberRes.json();
+        const memberText = await memberRes.text(); // ดึงเป็น Text ก่อนกันพัง
+        const memberData = JSON.parse(memberText);
 
-        // 🖼️ อัปเดตข้อมูลส่วนตัวทันทีที่ได้ข้อมูลมา
+        // 🖼️ อัปเดตข้อมูลส่วนตัว
         if (Array.isArray(memberData)) {
             const myProfile = memberData.find(row => row[1] === currentUserId);
             if (myProfile) {
@@ -59,19 +60,21 @@ async function loadUserDataAndHistory() {
             }
         }
 
-        // 🌟 2. จากนั้นค่อนยิง API ดึงประวัติ (เพื่อไม่ให้ Google Script ทำงานชนกัน)
+        // 🌟 2. ดึงประวัติการลงเวลา
         const historyRes = await fetch(CONFIG.WEB_APP_API, {
             method: 'POST',
             body: JSON.stringify({ action: 'fetchData', userId: currentUserId })
         });
-        const allHistoryData = await historyRes.json();
+        const historyText = await historyRes.text();
+        const allHistoryData = JSON.parse(historyText);
 
         // 📋 จัดการข้อมูลประวัติ
         if (Array.isArray(allHistoryData)) {
+            // กรองเอาเฉพาะข้อมูลของ User คนปัจจุบัน และตัด Header (แถวที่ 0) ทิ้ง
             historyData = allHistoryData.filter((row, index) => index > 0 && row[11] === currentUserId);
 
             if (historyData.length > 0) {
-                historyData.reverse(); // ล่าสุดขึ้นก่อน
+                historyData.reverse(); // เรียงล่าสุดขึ้นก่อน
                 buildTable();
             } else {
                 tableBody.innerHTML = '<tr><td colspan="3" class="py-10 text-center text-slate-400">ยังไม่มีประวัติการลงเวลา</td></tr>';
@@ -79,7 +82,7 @@ async function loadUserDataAndHistory() {
                 document.getElementById('rowsInfo').textContent = 'หน้า 1/1';
             }
         } else {
-            throw new Error("รูปแบบข้อมูลจากฐานข้อมูลไม่ถูกต้อง");
+            throw new Error("โครงสร้างข้อมูลไม่ถูกต้อง");
         }
 
     } catch (error) {
@@ -89,7 +92,7 @@ async function loadUserDataAndHistory() {
 }
 
 // ==========================================
-// 📅 DATE FORMATTER (แปลงวันที่เป็นภาษาไทย รองรับ Google Sheets ISO Date)
+// 📅 DATE FORMATTER (ตัวแปลงวันที่ขั้นเทพ รองรับทั้ง Text และ ISO Date จาก Google)
 // ==========================================
 function formatThaiDateTime(dateStr, timeStr) {
     if (!dateStr || dateStr === "-") return "-";
@@ -101,44 +104,49 @@ function formatThaiDateTime(dateStr, timeStr) {
         const safeDateStr = String(dateStr).trim();
         const safeTimeStr = String(timeStr).trim();
 
-        // 🌟 1. เช็คว่าเป็นรูปแบบเวลาดิบจาก Google Sheets หรือไม่ (มีตัว T และ Z)
-        if (safeDateStr.includes("T") && safeDateStr.includes("Z")) {
+        // --- 1. จัดการฝั่ง วันที่ (Date) ---
+        if (safeDateStr.includes("T")) {
+            // กรณีเป็น ISO Format (เช่น 2026-03-31T17:00:00.000Z)
             const d = new Date(safeDateStr);
             day = d.getDate();
-            month = d.getMonth(); // ไม่ต้อง -1 เพราะ Date object เริ่มจาก 0 อยู่แล้ว
+            month = d.getMonth();
             year = d.getFullYear();
-        } else {
-            // 🌟 2. ถ้าเป็นแบบข้อความ Text ปกติ "DD/MM/YYYY"
+        } else if (safeDateStr.includes("/")) {
+            // กรณีเป็น Text ธรรมดา (เช่น 01/04/2026)
             const parts = safeDateStr.split('/');
             if (parts.length === 3) {
                 day = parseInt(parts[0], 10);
                 month = parseInt(parts[1], 10) - 1;
                 year = parseInt(parts[2], 10);
             } else {
-                return `${safeDateStr} ${safeTimeStr}`; // ถ้าอ่านไม่ออก คืนค่าเดิม
+                return `${safeDateStr} ${safeTimeStr}`; // ถ้าไม่ตรงแพทเทิร์น คืนค่าเดิม
             }
+        } else {
+            return `${safeDateStr} ${safeTimeStr}`;
         }
 
-        // 🌟 3. จัดการเวลา (รองรับทั้งแบบ ISO 1899-12-30T...Z และแบบ 08:30)
-        if (safeTimeStr.includes("T") && safeTimeStr.includes("Z")) {
+        // --- 2. จัดการฝั่ง เวลา (Time) ---
+        if (safeTimeStr.includes("T")) {
+            // กรณีเป็น ISO Format (เช่น 1899-12-30T01:53:56.000Z)
             const t = new Date(safeTimeStr);
             const hh = String(t.getHours()).padStart(2, '0');
             const mm = String(t.getMinutes()).padStart(2, '0');
             timeFormatted = `${hh}:${mm} น.`;
         } else if (safeTimeStr && safeTimeStr !== "undefined" && safeTimeStr !== "-") {
-            timeFormatted = `${safeTimeStr} น.`;
+            // กรณีเป็น Text ปกติ (เช่น 08:30)
+            timeFormatted = `${safeTimeStr.replace(" น.", "").trim()} น.`;
         }
 
-        // แปลง ค.ศ. เป็น พ.ศ.
+        // --- 3. ปรับปีเป็น พ.ศ. ---
         if (year < 2500) year += 543;
 
         const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
-        return `${day} ${thaiMonths[month]} ${year} <span class="text-medical-600 ml-1">${timeFormatted}</span>`;
+        return `${day} ${thaiMonths[month]} ${year} <span class="text-medical-600 ml-1 font-bold">${timeFormatted}</span>`;
 
     } catch (e) {
         console.error("Date format error:", e);
-        return String(dateStr); // ถ้าพังให้โชว์ข้อความเดิมกันตารางหาย
+        return `${dateStr} ${timeStr}`; // ถ้า Error ให้โชว์ข้อมูลดิบกันตารางหาย
     }
 }
 
