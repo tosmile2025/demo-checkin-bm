@@ -6,198 +6,139 @@ const rowsPerPage = 10;
 let currentPage = 1;
 let tableData = [];
 let filteredData = [];
-const departmentColors = {};
-const badgeColors = [
-    "bg-red-100 text-red-800", "bg-green-100 text-green-800", "bg-blue-100 text-blue-800",
-    "bg-yellow-100 text-yellow-800", "bg-purple-100 text-purple-800", "bg-pink-100 text-pink-800",
-    "bg-indigo-100 text-indigo-800", "bg-teal-100 text-teal-800",
-];
 
-// ฟังก์ชันสุ่มสีสำหรับ Badge (ชั้นปี)
-function getRandomColorClass() {
-    return badgeColors[Math.floor(Math.random() * badgeColors.length)];
-}
-
-function getDepartmentColor(dept) {
-    if (!departmentColors[dept]) {
-        departmentColors[dept] = getRandomColorClass();
-    }
-    return departmentColors[dept];
-}
-
-// จัดการปุ่ม (Loading State)
+// ฟังก์ชันเปิด/ปิด Loading ที่ปุ่ม
 function setButtonState(buttonElement, isLoading, originalText, loadingText) {
     if (!buttonElement) return;
     if (isLoading) {
         buttonElement.dataset.originalText = originalText;
-        buttonElement.textContent = loadingText;
+        buttonElement.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> ${loadingText}`;
         buttonElement.disabled = true;
         buttonElement.classList.add('opacity-75', 'cursor-not-allowed');
     } else {
-        buttonElement.textContent = buttonElement.dataset.originalText || originalText;
+        buttonElement.innerHTML = buttonElement.dataset.originalText || originalText;
         buttonElement.disabled = false;
         buttonElement.classList.remove('opacity-75', 'cursor-not-allowed');
     }
 }
 
 // ==========================================
-// 📡 FETCH DATA (ดึงข้อมูล)
+// 📡 FETCH DATA
 // ==========================================
 async function fetchData() {
     const tableBody = document.querySelector("#data-table tbody");
-    tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-gray-500">กำลังโหลดข้อมูล...</td></tr>`;
 
     try {
-        // ใช้ WEB_APP_API จาก config.js และส่ง source: 'member' เข้าไป
         const response = await fetch(`${CONFIG.WEB_APP_API}?source=member`);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) throw new Error('HTTP error');
 
         const data = await response.json();
-        // ลบ Header แถวที่ 1 ออก (index 0)
-        tableData = data.slice(1);
+        tableData = data.slice(1); // ตัด Header 
         applyFilters();
     } catch (error) {
-        console.error("Error fetching data:", error);
-        tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-red-500">ไม่สามารถโหลดข้อมูลได้: ${error.message}</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-16 text-rose-500 font-bold"><i class="fas fa-exclamation-circle text-3xl mb-3 block"></i>ไม่สามารถโหลดข้อมูลได้</td></tr>`;
     }
 }
 
 // ==========================================
-// 🗂️ DISPLAY & PAGINATION (แสดงผล & แบ่งหน้า)
+// 🗂️ DISPLAY & PAGINATION
 // ==========================================
-function displayPage(page) {
-    const startIndex = (page - 1) * rowsPerPage;
-    const endIndex = startIndex + rowsPerPage;
-    const paginatedData = filteredData.slice(startIndex, endIndex);
+function renderTable() {
     const tableBody = document.querySelector("#data-table tbody");
-
     tableBody.innerHTML = "";
 
-    if (paginatedData.length === 0 && filteredData.length > 0 && currentPage > 1) {
-        currentPage = 1;
-        displayPage(currentPage);
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    const pageData = filteredData.slice(startIndex, startIndex + rowsPerPage);
+
+    if (pageData.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-16 text-slate-500 font-medium">ไม่พบข้อมูลนิสิตแพทย์</td></tr>`;
+        document.getElementById('rowsInfo').textContent = 'ไม่พบข้อมูล';
         return;
     }
-    if (paginatedData.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-gray-500">ไม่พบข้อมูลพนักงาน</td></tr>`;
-        return;
-    }
 
-    paginatedData.forEach((row) => {
-        if (row.every(cell => cell === null || cell === undefined || cell === "")) return;
-
-        const tr = document.createElement("tr");
-        tr.className = "hover:bg-gray-50 transition duration-150 ease-in-out";
-
-        // อ้างอิง Index: [0]ID, [1]UserID, [2]ชื่อ, [3]รหัสนิสิต, [4]ชั้นปี, [5]รูปภาพ, 
-        // [6]เวลาล่าสุด, [7]เวลาเข้างาน, [8]ลาพักร้อน, [9]ลากิจ, [10]ลาป่วย, [11]OT, [12]เวลาออกงาน
+    pageData.forEach((row) => {
+        // [0]ID, [1]UserID, [2]ชื่อ, [3]รหัสนิสิต, [4]ชั้นปี, [5]รูปภาพ, 
+        // [7]เวลาเข้า, [8]ลาพักร้อน, [9]ลากิจ, [10]ลาป่วย, [11]OT, [12]เวลาออก
         const id = row[0] || "-";
         const name = row[2] || "ไม่ระบุชื่อ";
-        const employeeCode = row[3] || "-";
-        const department = row[4] || "ไม่ระบุ";
-        const imageUrl = row[5];
+        const empCode = row[3] || "-";
+        const dept = row[4] || "-";
+        const imgUrl = row[5] || 'https://via.placeholder.com/60';
 
-        // ปรับ index ให้ตรงกับ Google Sheet (ตามโค้ด Backend ใหม่)
         const expectedIn = row[7] || "-";
         const expectedOut = row[12] || "-";
-        const vacation = row[8] || 0;
-        const personal = row[9] || 0;
-        const sick = row[10] || 0;
+        const leaveTotal = (parseInt(row[8]) || 0) + (parseInt(row[9]) || 0) + (parseInt(row[10]) || 0);
         const ot = row[11] || 0;
 
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-50 transition border-b border-slate-50/50";
+
         tr.innerHTML = `
-            <td class="py-3 px-4 border-b border-gray-100 text-center font-medium">${id}</td>
-            <td class="py-3 px-4 border-b border-gray-100">
-                <div class="flex items-start space-x-4">
-                    <div class="flex-shrink-0">
-                        ${imageUrl ? `<img src="${imageUrl}" alt="Profile" class="h-16 w-16 object-cover rounded-md border border-gray-200 shadow-sm">` : `<div class="h-16 w-16 bg-gray-200 rounded-md flex items-center justify-center text-gray-400 text-xs shadow-sm">No Img</div>`}
-                    </div>
+            <td class="py-4 px-5 text-center font-bold text-slate-500">${id}</td>
+            <td class="py-4 px-5">
+                <div class="flex items-center gap-4">
+                    <img src="${imgUrl}" class="h-12 w-12 object-cover rounded-full border border-slate-200 shadow-sm bg-white">
                     <div>
-                        <div class="font-bold text-gray-800 text-base">${name}</div>
-                        <div class="text-sm text-gray-600 mt-0.5">รหัส: ${employeeCode}</div>
-                        <div class="text-xs text-slate-500 mt-1.5 flex gap-2 flex-wrap">
-                            <span class="bg-slate-100 px-2 py-0.5 rounded">เวลา: ${expectedIn} - ${expectedOut}</span>
-                            <span class="bg-slate-100 px-2 py-0.5 rounded">ลา: ${vacation}/${personal}/${sick}</span>
-                            <span class="bg-slate-100 px-2 py-0.5 rounded">OT: ${ot} ชม.</span>
+                        <div class="font-bold text-slate-800 text-base">${name}</div>
+                        <div class="text-xs text-slate-500 font-medium mt-0.5">รหัส: <span class="text-slate-700">${empCode}</span></div>
+                        <div class="text-[10px] text-slate-400 mt-1.5 flex gap-1.5 flex-wrap">
+                            <span class="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200"><i class="far fa-clock"></i> ${expectedIn}-${expectedOut}</span>
+                            <span class="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">ลารวม ${leaveTotal} วัน</span>
+                            <span class="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">OT ${ot} ชม.</span>
                         </div>
                     </div>
                 </div>
             </td>
-            <td class="py-3 px-4 border-b border-gray-100">
-                <span class="inline-block px-3 py-1 text-xs rounded-full font-bold ${getDepartmentColor(department)}">${department}</span>
+            <td class="py-4 px-5 text-center">
+                <span class="inline-block px-3 py-1 text-xs rounded-lg font-bold bg-medical-50 text-medical-700 border border-medical-100">ปี ${dept}</span>
             </td>
-            <td class="py-3 px-4 border-b border-gray-100 text-center space-x-2">
-                <button class="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200 ease-in-out text-sm font-semibold shadow-sm edit-btn">แก้ไข</button>
-                <button class="bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 transition duration-200 ease-in-out text-sm font-semibold shadow-sm delete-btn">ลบ</button>
+            <td class="py-4 px-5 text-center">
+                <div class="flex justify-center gap-2">
+                    <button class="edit-btn bg-medical-50 text-medical-600 border border-medical-200 py-1.5 px-3 rounded-lg hover:bg-medical-100 hover:text-medical-800 transition font-bold text-xs shadow-sm"><i class="fas fa-edit mr-1"></i> แก้ไข</button>
+                    <button class="delete-btn bg-rose-50 text-rose-600 border border-rose-200 py-1.5 px-3 rounded-lg hover:bg-rose-100 hover:text-rose-800 transition font-bold text-xs shadow-sm"><i class="fas fa-trash-alt mr-1"></i> ลบ</button>
+                </div>
             </td>
         `;
 
         tr.querySelector('.edit-btn').onclick = () => openEditModal(row);
-        tr.querySelector('.delete-btn').onclick = (event) => confirmDelete(id, event.target);
-        tableBody.appendChild(tr);
+        tr.querySelector('.delete-btn').onclick = (e) => confirmDelete(id, e.target);
+        document.querySelector("#data-table tbody").appendChild(tr);
     });
+
+    setupPagination();
 }
 
 function setupPagination() {
-    const pageCount = Math.ceil(filteredData.length / rowsPerPage);
+    const totalPages = Math.ceil(filteredData.length / rowsPerPage) || 1;
     const pagination = document.getElementById("pagination");
     pagination.innerHTML = "";
-    if (pageCount <= 1) return;
 
-    const prevButton = document.createElement("button");
-    prevButton.textContent = "ก่อนหน้า";
-    prevButton.className = `py-2 px-4 rounded-lg bg-black text-white hover:bg-gray-800 transition font-semibold disabled:opacity-50 mr-2`;
-    prevButton.disabled = currentPage === 1;
-    prevButton.onclick = () => {
-        if (currentPage > 1) { currentPage--; displayPage(currentPage); updatePaginationButtons(); }
-    };
-    pagination.appendChild(prevButton);
+    document.getElementById("rowsInfo").textContent = `หน้า ${currentPage} / ${totalPages} (รวม ${filteredData.length} รายการ)`;
 
-    for (let i = 1; i <= pageCount; i++) {
-        const pageButton = document.createElement("button");
-        pageButton.textContent = i;
-        pageButton.className = `py-2 px-4 rounded-lg ${i === currentPage ? "bg-black text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"} transition font-semibold mx-1`;
-        pageButton.onclick = () => {
-            currentPage = i; displayPage(currentPage); updatePaginationButtons();
-        };
-        pagination.appendChild(pageButton);
-    }
+    if (totalPages <= 1) return;
 
-    const nextButton = document.createElement("button");
-    nextButton.textContent = "ถัดไป";
-    nextButton.className = `py-2 px-4 rounded-lg bg-black text-white hover:bg-gray-800 transition font-semibold disabled:opacity-50 ml-2`;
-    nextButton.disabled = currentPage === pageCount;
-    nextButton.onclick = () => {
-        if (currentPage < pageCount) { currentPage++; displayPage(currentPage); updatePaginationButtons(); }
-    };
-    pagination.appendChild(nextButton);
-}
+    for (let i = 1; i <= totalPages; i++) {
+        const btn = document.createElement("button");
+        btn.textContent = i;
+        btn.className = `h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold transition focus:outline-none `;
 
-function updatePaginationButtons() {
-    const pageCount = Math.ceil(filteredData.length / rowsPerPage);
-    const paginationButtons = document.getElementById("pagination").querySelectorAll("button");
-
-    paginationButtons.forEach((button) => {
-        if (!isNaN(parseInt(button.textContent))) {
-            if (parseInt(button.textContent) === currentPage) {
-                button.className = "py-2 px-4 rounded-lg bg-black text-white transition font-semibold mx-1";
-            } else {
-                button.className = "py-2 px-4 rounded-lg bg-gray-200 text-gray-800 hover:bg-gray-300 transition font-semibold mx-1";
-            }
+        if (i === currentPage) {
+            btn.classList.add("bg-medical-700", "text-white", "shadow-sm");
+        } else {
+            btn.classList.add("bg-white", "text-slate-600", "border", "border-slate-200", "hover:bg-medical-50", "hover:text-medical-700");
         }
-    });
 
-    const prevButton = paginationButtons[0];
-    const nextButton = paginationButtons[paginationButtons.length - 1];
-    if (prevButton && nextButton) {
-        prevButton.disabled = currentPage === 1;
-        nextButton.disabled = currentPage === pageCount;
+        btn.onclick = () => { currentPage = i; renderTable(); window.scrollTo(0, 0); };
+        pagination.appendChild(btn);
     }
 }
 
 // ==========================================
-// ✏️ EDIT & MODAL (แก้ไขข้อมูล)
+// ✏️ EDIT & MODAL
 // ==========================================
+const modal = document.getElementById("edit-modal");
+const modalContent = document.getElementById("edit-modal-content");
+
 function openEditModal(row) {
     document.getElementById("edit-id").value = row[0] || "";
     document.getElementById("edit-userID").value = row[1] || "";
@@ -206,7 +147,6 @@ function openEditModal(row) {
     document.getElementById("edit-department").value = row[4] || "";
     document.getElementById("edit-imageUrl").value = row[5] || "";
 
-    // อ้างอิงตาม Column Index ของชีตสมาชิกใหม่
     document.getElementById("edit-workStart").value = row[7] || "";
     document.getElementById("edit-vacationLeave").value = row[8] || "0";
     document.getElementById("edit-personalLeave").value = row[9] || "0";
@@ -215,79 +155,44 @@ function openEditModal(row) {
     document.getElementById("edit-workEnd").value = row[12] || "";
 
     document.getElementById("edit-image").value = "";
-    const previewImage = document.getElementById("preview-image");
+    document.getElementById("preview-image").src = row[5] || "https://via.placeholder.com/150";
 
-    if (row[5]) {
-        previewImage.src = row[5];
-        previewImage.classList.remove("hidden");
-    } else {
-        previewImage.src = "#";
-        previewImage.classList.add("hidden");
-    }
-
-    setButtonState(document.getElementById("save-button"), false, "บันทึก", "กำลังบันทึก...");
-    document.getElementById("edit-modal").classList.remove("hidden");
+    modal.classList.remove("hidden");
+    setTimeout(() => {
+        modal.classList.remove("opacity-0");
+        modalContent.classList.remove("scale-95");
+    }, 10);
 }
 
 function closeEditModal() {
-    document.getElementById("edit-modal").classList.add("hidden");
-    document.getElementById("edit-form").reset();
-    document.getElementById("preview-image").src = "#";
-    document.getElementById("preview-image").classList.add("hidden");
+    modal.classList.add("opacity-0");
+    modalContent.classList.add("scale-95");
+    setTimeout(() => { modal.classList.add("hidden"); }, 300);
 }
 
 document.getElementById("edit-image").addEventListener('change', function (event) {
-    const preview = document.getElementById('preview-image');
     const file = event.target.files[0];
     if (file) {
         const reader = new FileReader();
-        reader.onload = function (e) {
-            preview.src = e.target.result;
-            preview.classList.remove('hidden');
-        }
+        reader.onload = (e) => document.getElementById('preview-image').src = e.target.result;
         reader.readAsDataURL(file);
-    } else {
-        const originalImageUrl = document.getElementById("edit-imageUrl").value;
-        if (originalImageUrl) {
-            preview.src = originalImageUrl;
-            preview.classList.remove('hidden');
-        } else {
-            preview.src = '#';
-            preview.classList.add('hidden');
-        }
     }
 });
 
 // ==========================================
-// 💾 SAVE, DELETE & RESET DATA (บันทึก ลบ รีเซ็ต)
+// 💾 SAVE, DELETE & RESET
 // ==========================================
-
 function getBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => {
-            const base64String = reader.result.split(",")[1];
-            resolve(base64String);
-        };
-        reader.onerror = (error) => reject(error);
+        reader.onload = () => resolve(reader.result.split(",")[1]);
+        reader.onerror = error => reject(error);
         reader.readAsDataURL(file);
     });
 }
 
 document.getElementById("edit-form").addEventListener("submit", async function (e) {
     e.preventDefault();
-
-    const id = document.getElementById("edit-id").value;
-    const userID = document.getElementById("edit-userID").value;
-    const name = document.getElementById("edit-name").value;
-    const employeeID = document.getElementById("edit-employeeID").value;
-    const department = document.getElementById("edit-department").value;
-    const vacationLeave = document.getElementById("edit-vacationLeave").value;
-    const personalLeave = document.getElementById("edit-personalLeave").value;
-    const sickLeave = document.getElementById("edit-sickLeave").value;
-    const ot = document.getElementById("edit-ot").value;
-    const workStart = document.getElementById("edit-workStart").value;
-    const workEnd = document.getElementById("edit-workEnd").value;
 
     const imageFile = document.getElementById("edit-image").files[0];
     let imageData = document.getElementById("edit-imageUrl").value;
@@ -297,158 +202,131 @@ document.getElementById("edit-form").addEventListener("submit", async function (
         try {
             imageData = await getBase64(imageFile);
             isNewImage = true;
-        } catch (error) {
-            Swal.fire("เกิดข้อผิดพลาด", "การแปลงรูปภาพล้มเหลว กรุณาลองใหม่อีกครั้ง", "error");
-            return;
-        }
+        } catch (error) { return Swal.fire("เกิดข้อผิดพลาด", "การแปลงรูปภาพล้มเหลว", "error"); }
     }
 
-    const saveButton = document.getElementById("save-button");
-    setButtonState(saveButton, true, "บันทึก", "กำลังบันทึก...");
+    const saveBtn = document.getElementById("save-button");
+    const originalHtml = saveBtn.innerHTML;
+    setButtonState(saveBtn, true, originalHtml, "กำลังบันทึก...");
 
-    // ใช้ URLSearchParams แทน JSON เพื่อให้เข้ากับระบบ doPost ที่คุณเขียนไว้ใน Google Script
     const formData = new URLSearchParams();
     formData.append('method', 'updateData');
-    formData.append('id', id);
-    formData.append('userID', userID);
-    formData.append('name', name);
-    formData.append('employeeID', employeeID);
-    formData.append('department', department);
+    formData.append('id', document.getElementById("edit-id").value);
+    formData.append('userID', document.getElementById("edit-userID").value);
+    formData.append('name', document.getElementById("edit-name").value);
+    formData.append('employeeID', document.getElementById("edit-employeeID").value);
+    formData.append('department', document.getElementById("edit-department").value);
     formData.append('imageUrl', imageData);
     formData.append('isNewImage', isNewImage.toString());
-    formData.append('vacationLeave', vacationLeave);
-    formData.append('personalLeave', personalLeave);
-    formData.append('sickLeave', sickLeave);
-    formData.append('ot', ot);
-    formData.append('workStart', workStart);
-    formData.append('workEnd', workEnd);
+    formData.append('vacationLeave', document.getElementById("edit-vacationLeave").value);
+    formData.append('personalLeave', document.getElementById("edit-personalLeave").value);
+    formData.append('sickLeave', document.getElementById("edit-sickLeave").value);
+    formData.append('ot', document.getElementById("edit-ot").value);
+    formData.append('workStart', document.getElementById("edit-workStart").value);
+    formData.append('workEnd', document.getElementById("edit-workEnd").value);
 
     try {
-        const response = await fetch(CONFIG.WEB_APP_API, {
-            method: "POST",
-            body: formData,
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-        });
-
-        const result = await response.text();
-        Swal.fire("สำเร็จ!", "บันทึกข้อมูลเรียบร้อยแล้ว", "success");
+        await fetch(CONFIG.WEB_APP_API, { method: "POST", body: formData });
+        Swal.fire("สำเร็จ!", "อัปเดตข้อมูลเรียบร้อยแล้ว", "success");
         await fetchData();
         closeEditModal();
     } catch (error) {
-        Swal.fire("เกิดข้อผิดพลาด!", `การอัปเดตข้อมูลล้มเหลว: ${error.message}`, "error");
+        Swal.fire("ข้อผิดพลาด!", `อัปเดตล้มเหลว: ${error.message}`, "error");
     } finally {
-        setButtonState(saveButton, false, "บันทึก", "กำลังบันทึก...");
+        setButtonState(saveBtn, false, originalHtml, "");
     }
 });
 
-async function deleteData(id, buttonElement) {
-    setButtonState(buttonElement, true, "ลบ", "กำลังลบ...");
-
-    const formData = new URLSearchParams();
-    formData.append('method', 'deleteData');
-    formData.append('id', id);
+async function deleteData(id, btnElement) {
+    const originalHtml = btnElement.innerHTML;
+    setButtonState(btnElement, true, originalHtml, "ลบ...");
 
     try {
-        const response = await fetch(CONFIG.WEB_APP_API, {
-            method: "POST",
-            body: formData,
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-        });
-        const result = await response.text();
-        Swal.fire("ลบเรียบร้อย", "ลบข้อมูลสำเร็จ", "success");
+        const formData = new URLSearchParams();
+        formData.append('method', 'deleteData');
+        formData.append('id', id);
+
+        await fetch(CONFIG.WEB_APP_API, { method: "POST", body: formData });
+        Swal.fire("ลบเรียบร้อย", "ลบข้อมูลนิสิตแพทย์สำเร็จ", "success");
         await fetchData();
     } catch (error) {
-        Swal.fire("เกิดข้อผิดพลาด!", `การลบข้อมูลล้มเหลว: ${error.message}`, "error");
-        setButtonState(buttonElement, false, "ลบ", "ลบ");
+        Swal.fire("ข้อผิดพลาด!", `การลบข้อมูลล้มเหลว: ${error.message}`, "error");
+        setButtonState(btnElement, false, originalHtml, "");
     }
 }
 
-function confirmDelete(id, buttonElement) {
+function confirmDelete(id, btnElement) {
     Swal.fire({
-        title: "คุณแน่ใจหรือไม่?",
-        text: `คุณต้องการลบข้อมูลพนักงาน ID: ${id} หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้!`,
+        title: "ยืนยันการลบ",
+        text: `ต้องการลบข้อมูล ID: ${id} หรือไม่?`,
         icon: "warning",
         showCancelButton: true,
-        confirmButtonColor: "#d33",
-        cancelButtonColor: "#6B7280",
-        confirmButtonText: "ใช่, ลบเลย!",
+        confirmButtonColor: "#e11d48",
+        cancelButtonColor: "#94a3b8",
+        confirmButtonText: "ลบเลย",
         cancelButtonText: "ยกเลิก"
     }).then((result) => {
-        if (result.isConfirmed) { deleteData(id, buttonElement); }
+        if (result.isConfirmed) deleteData(id, btnElement);
     });
 }
 
-async function handleReset(methodName, btnId, btnText, titleText, confirmColor) {
+async function handleReset(methodName, btnId, btnText, titleText) {
     const btn = document.getElementById(btnId);
-    setButtonState(btn, true, btnText, "กำลังรีเซต...");
+    const originalHtml = btn.innerHTML;
 
     Swal.fire({
-        title: "คุณแน่ใจหรือไม่?",
-        text: `คุณต้องการรีเซต${titleText}ทั้งหมดเป็น 0 หรือไม่?`,
+        title: "ยืนยันการรีเซ็ต",
+        text: `ต้องการล้าง${titleText}ทั้งหมดเป็น 0 หรือไม่?`,
         icon: "warning",
         showCancelButton: true,
-        confirmButtonColor: confirmColor,
-        cancelButtonColor: "#6B7280",
-        confirmButtonText: "ใช่, รีเซตเลย!",
+        confirmButtonColor: "#0f766e",
+        cancelButtonColor: "#94a3b8",
+        confirmButtonText: "รีเซ็ตเลย",
         cancelButtonText: "ยกเลิก"
     }).then(async (result) => {
         if (result.isConfirmed) {
+            setButtonState(btn, true, originalHtml, "กำลังรีเซ็ต...");
             try {
                 const formData = new URLSearchParams();
                 formData.append('method', methodName);
-
-                await fetch(CONFIG.WEB_APP_API, {
-                    method: "POST",
-                    body: formData,
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-                });
-
-                Swal.fire("สำเร็จ!", `รีเซต${titleText}เรียบร้อยแล้ว`, "success");
+                await fetch(CONFIG.WEB_APP_API, { method: "POST", body: formData });
+                Swal.fire("สำเร็จ!", `ล้าง${titleText}เรียบร้อยแล้ว`, "success");
                 fetchData();
-            } catch (error) {
-                Swal.fire("เกิดข้อผิดพลาด", `ไม่สามารถรีเซตได้: ${error.message}`, "error");
-            }
+            } catch (error) { Swal.fire("ข้อผิดพลาด", "ไม่สามารถรีเซ็ตได้", "error"); }
+            finally { setButtonState(btn, false, originalHtml, ""); }
         }
-        setButtonState(btn, false, btnText, "กำลังรีเซต...");
     });
 }
 
-document.getElementById("reset-leaves").addEventListener("click", () => handleReset('resetLeaves', 'reset-leaves', 'วันลา', 'วันลา', '#10B981'));
-document.getElementById("reset-ot").addEventListener("click", () => handleReset('resetOT', 'reset-ot', 'โอที', 'OT', '#10B981'));
+document.getElementById("reset-leaves").addEventListener("click", () => handleReset('resetLeaves', 'reset-leaves', 'ล้างวันลา', 'ค่าวันลา'));
+document.getElementById("reset-ot").addEventListener("click", () => handleReset('resetOT', 'reset-ot', 'ล้าง OT', 'ค่า OT'));
 
 // ==========================================
-// 🔍 FILTER (การค้นหา)
+// 🔍 FILTER (การค้นหาและกรองชั้นปี)
 // ==========================================
-const filterNameInput = document.getElementById("filter-name");
-const filterDeptInput = document.getElementById("filter-department");
-const filterEmpIDInput = document.getElementById("filter-employeeID");
-
 function applyFilters() {
-    const nameValue = filterNameInput.value.toLowerCase().trim();
-    const deptValue = filterDeptInput.value.toLowerCase().trim();
-    const empIdValue = filterEmpIDInput.value.toLowerCase().trim();
+    const searchVal = document.getElementById("filter-search").value.toLowerCase().trim();
+    const yearVal = document.getElementById("filter-year").value.trim();
 
     filteredData = tableData.filter((row) => {
-        if (row.every(cell => cell === null || cell === undefined || cell === "")) return false;
+        const name = (row[2] || "").toLowerCase();
+        const empId = (row[3] || "").toLowerCase();
+        const dept = (row[4] || "").toString(); // ชั้นปี
 
-        const empName = (row[2] || "").toLowerCase();
-        const employeeID = (row[3] || "").toLowerCase();
-        const department = (row[4] || "").toLowerCase();
+        // กรองชื่อและรหัส
+        if (searchVal && !name.includes(searchVal) && !empId.includes(searchVal)) return false;
+        // 🌟 กรองชั้นปี
+        if (yearVal && dept !== yearVal) return false;
 
-        return (
-            empName.includes(nameValue) &&
-            employeeID.includes(empIdValue) &&
-            department.includes(deptValue)
-        );
+        return true;
     });
+
     currentPage = 1;
-    displayPage(currentPage);
-    setupPagination();
+    renderTable();
 }
 
-filterNameInput.addEventListener("input", applyFilters);
-filterDeptInput.addEventListener("input", applyFilters);
-filterEmpIDInput.addEventListener("input", applyFilters);
+document.getElementById("filter-search").addEventListener("input", applyFilters);
+document.getElementById("filter-year").addEventListener("change", applyFilters);
 
-// เริ่มต้นทำงานเมื่อโหลดไฟล์เสร็จ
+// โหลดข้อมูลเมื่อเปิดหน้า
 window.onload = fetchData;
