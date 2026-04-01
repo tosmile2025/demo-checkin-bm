@@ -16,6 +16,7 @@ let currentUserId = null;
 let stream;
 let currentFacingMode = "user";
 let activeCameraMode = null;
+let isMirrored = true; // 🌟 เพิ่มตัวแปรเช็คสถานะการ Mirror (ค่าเริ่มต้นเปิดใช้)
 
 let watchId = null;
 let cachedLocation = null;
@@ -24,10 +25,9 @@ let leafletMap = null;
 let userMarker = null;
 
 // ==========================================
-// 🚀 1. SYSTEM INITIALIZATION (อัปเกรดโหลดเร็ว + แจ้งเปอร์เซ็นต์)
+// 🚀 1. SYSTEM INITIALIZATION
 // ==========================================
 
-// ฟังก์ชันอัปเดตหน้าจอโหลด
 function updateLoading(percent, mainText, subText) {
     const progressEl = document.getElementById('loadingProgress');
     const mainTextEl = document.getElementById('loadingText');
@@ -38,9 +38,8 @@ function updateLoading(percent, mainText, subText) {
     if (subTextEl && subText) subTextEl.textContent = subText;
 }
 
-// ฟังก์ชันโชว์ Error ในหน้าโหลด
 function showLoadingError(message) {
-    document.getElementById('loadingContent').classList.add('hidden'); // ซ่อนหลอดโหลด
+    document.getElementById('loadingContent').classList.add('hidden');
     const errorBox = document.getElementById('loadingError');
     errorBox.classList.remove('hidden');
     errorBox.classList.add('flex');
@@ -52,10 +51,8 @@ window.onload = async function () {
 
     try {
         updateLoading(15, 'เชื่อมต่อเซิร์ฟเวอร์...', 'กำลังเตรียมข้อมูลระบบ');
-
-        // 🌟 โหลดข้อมูล 2 ทางพร้อมกัน (Parallel Fetch) เพื่อความเร็ว X2
-        const mapPromise = fetchMapSettings().catch(e => console.warn(e)); // ถ้าแผนที่พัง ให้ใช้ค่า Default แทน ไม่ให้แอปค้าง
-        const liffPromise = initializeLiffCore(); // ถ้า LIFF พัง แอปจะหยุดแล้วโชว์ Error
+        const mapPromise = fetchMapSettings().catch(e => console.warn(e));
+        const liffPromise = initializeLiffCore();
 
         await Promise.all([mapPromise, liffPromise]);
 
@@ -123,7 +120,6 @@ async function checkUserStatus(userId) {
 
         updateLoading(100, 'เสร็จสิ้น!', 'เข้าสู่ระบบลงเวลา');
 
-        // 🌟 แก้บัคแอปค้าง: สลับหน้าจอให้เสร็จสมบูรณ์ "ก่อน" ค่อยเรียกกล้องทำงาน
         switchView('checkinView');
         setTimeout(() => { setupCheckinView(); }, 600);
     } else {
@@ -147,14 +143,17 @@ function switchView(viewId) {
 }
 
 // ==========================================
-// 📸 2. CAMERA & IMAGE OPTIMIZATION (ป้องกันกล้องพัง)
+// 📸 2. CAMERA & IMAGE OPTIMIZATION (ระบบกล้อง & Mirror)
 // ==========================================
 function startCamera(mode) {
     activeCameraMode = mode;
     const videoEl = document.getElementById(`${mode}-camera-preview`);
     if (stream) { stream.getTracks().forEach(track => track.stop()); }
 
-    // ถ้าเปิดกล้องไม่ได้ (คนไม่อนุญาต หรือ WebView พัง) แอปจะไม่ค้าง แต่จะขึ้นแจ้งเตือนแทน
+    // ค่าเริ่มต้น: กล้องหน้าให้กลับซ้ายขวา (Mirror) กล้องหลังไม่กลับ
+    isMirrored = (currentFacingMode === "user");
+    applyMirrorEffect(mode);
+
     navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } })
         .then(function (videoStream) {
             stream = videoStream;
@@ -165,20 +164,30 @@ function startCamera(mode) {
         })
         .catch(function (err) {
             console.error("Camera Error:", err);
-            // แสดงป้ายแดงแทนที่รูปกล้อง
             videoEl.outerHTML = `<div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-200 text-slate-500 p-4 text-center border-2 border-dashed border-slate-300"><i class="fas fa-camera-slash text-4xl mb-2 text-rose-400"></i><p class="text-sm font-bold text-slate-700">ไม่สามารถเปิดกล้องได้</p><p class="text-xs mt-1">กรุณาตรวจสอบการอนุญาต<br>การเข้าถึงกล้องในการตั้งค่าแอป LINE</p></div>`;
-            Swal.fire({
-                icon: "warning",
-                title: "เข้าถึงกล้องไม่ได้",
-                text: "กรุณาอนุญาตให้ LINE เข้าถึงกล้องเพื่อถ่ายรูป",
-                confirmButtonColor: "#0f766e"
-            });
+            Swal.fire({ icon: "warning", title: "เข้าถึงกล้องไม่ได้", text: "กรุณาอนุญาตให้ LINE เข้าถึงกล้องเพื่อถ่ายรูป", confirmButtonColor: "#0f766e" });
         });
 }
 
 function switchCamera(mode) {
     currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
     startCamera(mode);
+}
+
+// 🌟 ฟังก์ชันกดสลับ Mirror
+function toggleMirror(mode) {
+    isMirrored = !isMirrored;
+    applyMirrorEffect(mode);
+}
+
+// 🌟 ฟังก์ชันอัปเดต CSS ทันทีเมื่อ Mirror เปลี่ยน
+function applyMirrorEffect(mode) {
+    const videoEl = document.getElementById(`${mode}-camera-preview`);
+    const previewEl = document.getElementById(`${mode}-preview`);
+    const transformStyle = isMirrored ? "scaleX(-1)" : "scaleX(1)";
+
+    if (videoEl) videoEl.style.transform = transformStyle;
+    if (previewEl) previewEl.style.transform = transformStyle;
 }
 
 function captureOptimizedFrame(mode) {
@@ -194,6 +203,13 @@ function captureOptimizedFrame(mode) {
     canvas.height = video.videoHeight * scale;
 
     const ctx = canvas.getContext("2d");
+
+    // 🌟 พลิกภาพก่อนวาดลง Canvas ถ้าผู้ใช้เปิดโหมด Mirror ไว้
+    if (isMirrored) {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+    }
+
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     return canvas.toDataURL("image/jpeg", 0.7);
