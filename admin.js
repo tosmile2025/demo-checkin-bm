@@ -14,6 +14,8 @@ const rowsPerPageSelect = document.getElementById('rowsPerPage');
 const prevBtn = document.getElementById('prevPageBtn');
 const nextBtn = document.getElementById('nextPageBtn');
 
+const DEFAULT_AVATAR = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/No-Image-Placeholder.svg/330px-No-Image-Placeholder.svg.png";
+
 // ==========================================
 // 🚀 INITIAL LOAD
 // ==========================================
@@ -44,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('exportCsvBtn').addEventListener('click', () => exportData('csv'));
     document.getElementById('exportTxtBtn').addEventListener('click', () => exportData('txt'));
-    document.getElementById('exportTxtCustomBtn').addEventListener('click', () => exportData('custom_txt'));
+
 });
 
 // ==========================================
@@ -231,8 +233,12 @@ function renderTable() {
 
     pageData.forEach((item, index) => {
         // จัดการรูปภาพ (ดึงจาก Member และ Checkin)
-        const checkinImgUrl = item[1] || 'https://via.placeholder.com/40';
-        const profileImgUrl = item._memberData && item._memberData[5] ? item._memberData[5] : 'https://via.placeholder.com/40';
+        let checkinImgUrl = item[1];
+        if (!checkinImgUrl || String(checkinImgUrl).trim() === "" || !String(checkinImgUrl).startsWith("http")) checkinImgUrl = DEFAULT_AVATAR;
+
+        let profileImgUrl = item._memberData ? item._memberData[5] : "";
+        if (!profileImgUrl || String(profileImgUrl).trim() === "" || !String(profileImgUrl).startsWith("http")) profileImgUrl = DEFAULT_AVATAR;
+
         const dept = item._memberData ? item._memberData[4] : '-';
 
         const styles = getStatusStyle(item[4]);

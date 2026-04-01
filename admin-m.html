@@ -45,125 +45,124 @@
 
 <body class="bg-slate-100 text-slate-800 antialiased h-screen flex flex-col overflow-hidden">
 
-  <div class="bg-medical-700 text-white p-4 shadow-md z-20 flex justify-between items-center flex-shrink-0">
-    <div class="flex items-center gap-3">
-      <img src="logo-sm.png" class="w-10 h-10 bg-white rounded-lg p-1 shadow-sm" onerror="this.style.display='none'">
+  <div class="bg-medical-700 text-white p-5 shadow-md z-20 flex justify-between items-center flex-shrink-0">
+    <div class="flex items-center gap-4">
+      <img src="logo-sm.png" class="w-12 h-12 bg-white rounded-xl p-1 shadow-sm" onerror="this.style.display='none'">
       <div>
-        <h1 class="font-bold text-sm leading-tight">จัดการเวลา (Mobile)</h1>
-        <p class="text-[10px] text-medical-100 mt-0.5">ศูนย์แพทย์ พุทธชินราช</p>
+        <h1 class="font-bold text-base leading-tight">จัดการเวลา (Mobile)</h1>
+        <p class="text-xs text-medical-100 mt-0.5">ศูนย์แพทย์ พุทธชินราช</p>
       </div>
     </div>
     <button onclick="fetchDataAndDisplay()"
-      class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm active:bg-white/40 transition"><i
+      class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-base active:bg-white/40 transition"><i
         class="fas fa-sync-alt"></i></button>
   </div>
 
-  <div class="bg-white px-4 py-3 shadow-sm z-10 flex-shrink-0">
-    <div class="relative mb-3">
-      <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400"><i
+  <div class="bg-white px-5 py-4 shadow-sm z-10 flex-shrink-0">
+    <div class="relative mb-4">
+      <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 text-lg"><i
           class="fas fa-search"></i></div>
       <input type="text" id="searchInput"
-        class="w-full bg-slate-50 border border-slate-200 pl-9 p-2.5 rounded-xl text-sm outline-none focus:border-medical-500 transition"
+        class="w-full bg-slate-50 border border-slate-200 pl-12 p-3.5 rounded-xl text-base outline-none focus:border-medical-500 transition"
         placeholder="ค้นหาชื่อ, รหัสนิสิต...">
     </div>
-    <div class="flex gap-2 overflow-x-auto pb-1" id="filterTabs">
+    <div class="flex gap-2.5 overflow-x-auto pb-1" id="filterTabs">
       <button onclick="setFilter('all', this)"
-        class="tab-btn px-4 py-1.5 rounded-full text-xs font-bold bg-medical-600 text-white whitespace-nowrap shadow-sm">ทั้งหมด</button>
+        class="tab-btn px-5 py-2 rounded-full text-sm font-bold bg-medical-600 text-white whitespace-nowrap shadow-sm">ทั้งหมด</button>
       <button onclick="setFilter('เข้างาน', this)"
-        class="tab-btn px-4 py-1.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500 whitespace-nowrap">เข้างาน</button>
+        class="tab-btn px-5 py-2 rounded-full text-sm font-bold bg-slate-100 text-slate-500 whitespace-nowrap">เข้างาน</button>
       <button onclick="setFilter('ออกงาน', this)"
-        class="tab-btn px-4 py-1.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500 whitespace-nowrap">ออกงาน</button>
+        class="tab-btn px-5 py-2 rounded-full text-sm font-bold bg-slate-100 text-slate-500 whitespace-nowrap">ออกงาน</button>
       <button onclick="setFilter('late', this)"
-        class="tab-btn px-4 py-1.5 rounded-full text-xs font-bold bg-slate-100 text-slate-500 whitespace-nowrap">สาย/ออกก่อน</button>
+        class="tab-btn px-5 py-2 rounded-full text-sm font-bold bg-slate-100 text-slate-500 whitespace-nowrap">สาย/ออกก่อน</button>
     </div>
   </div>
 
-  <div class="flex-1 overflow-y-auto p-4 pb-24" id="dataList">
+  <div class="flex-1 overflow-y-auto p-4 pb-28" id="dataList">
     <div class="flex flex-col items-center justify-center h-full text-slate-400">
-      <div class="animate-spin rounded-full h-8 w-8 border-4 border-medical-200 border-t-medical-600 mb-3"></div>
-      <p class="text-sm font-bold">กำลังโหลดข้อมูล...</p>
+      <div class="animate-spin rounded-full h-10 w-10 border-4 border-medical-200 border-t-medical-600 mb-4"></div>
+      <p class="text-base font-bold">กำลังโหลดข้อมูล...</p>
     </div>
   </div>
 
   <div
-    class="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 flex justify-around items-center h-16 pb-safe z-20 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+    class="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 flex justify-around items-center h-20 pb-safe z-20 shadow-[0_-4px_15px_rgba(0,0,0,0.05)]">
     <a href="admin-m.html" class="flex flex-col items-center justify-center w-full h-full text-medical-600">
-      <i class="fas fa-list text-lg mb-1"></i><span class="text-[9px] font-bold">รายการ</span>
+      <i class="fas fa-list text-xl mb-1.5"></i><span class="text-xs font-bold">รายการ</span>
     </a>
     <a href="admin-map.html"
       class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-medical-600 transition">
-      <i class="fas fa-map-marker-alt text-lg mb-1"></i><span class="text-[9px] font-bold">แผนที่</span>
+      <i class="fas fa-map-marker-alt text-xl mb-1.5"></i><span class="text-xs font-bold">แผนที่</span>
     </a>
     <a href="member.html"
       class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-medical-600 transition">
-      <i class="fas fa-user-md text-lg mb-1"></i><span class="text-[9px] font-bold">นิสิต</span>
+      <i class="fas fa-user-md text-xl mb-1.5"></i><span class="text-xs font-bold">นิสิต</span>
     </a>
     <a href="admin.html"
       class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-medical-600 transition">
-      <i class="fas fa-desktop text-lg mb-1"></i><span class="text-[9px] font-bold">โหมด PC</span>
+      <i class="fas fa-desktop text-xl mb-1.5"></i><span class="text-xs font-bold">โหมด PC</span>
     </a>
   </div>
 
   <div id="modalOverlay" class="fixed inset-0 bg-black/60 z-40 hidden opacity-0 transition-opacity duration-300"
     onclick="closeModal()"></div>
   <div id="detailModal"
-    class="fixed bottom-0 inset-x-0 bg-white rounded-t-3xl z-50 bottom-sheet flex flex-col max-h-[85vh]">
-    <div class="flex justify-center pt-3 pb-2">
-      <div class="w-12 h-1.5 bg-slate-200 rounded-full"></div>
+    class="fixed bottom-0 inset-x-0 bg-white rounded-t-[2rem] z-50 bottom-sheet flex flex-col max-h-[85vh]">
+    <div class="flex justify-center pt-4 pb-2">
+      <div class="w-16 h-1.5 bg-slate-200 rounded-full"></div>
     </div>
 
-    <div class="p-5 overflow-y-auto">
-      <div class="flex justify-center gap-4 mb-4">
+    <div class="p-6 overflow-y-auto">
+      <div class="flex justify-center gap-5 mb-5">
         <div class="relative text-center">
           <img id="m-profileImg" src=""
-            class="w-16 h-16 rounded-full object-cover border-2 border-slate-200 shadow-sm mx-auto">
+            class="w-20 h-20 rounded-full object-cover border-2 border-slate-200 shadow-sm mx-auto">
           <span
-            class="bg-slate-600 text-white text-[9px] px-2 py-0.5 rounded-full absolute -bottom-2 left-1/2 -translate-x-1/2">โปรไฟล์</span>
+            class="bg-slate-600 text-white text-[11px] px-3 py-1 rounded-full absolute -bottom-2.5 left-1/2 -translate-x-1/2 shadow">โปรไฟล์</span>
         </div>
         <div class="relative text-center">
           <img id="m-checkinImg" src=""
-            class="w-16 h-16 rounded-full object-cover border-2 border-medical-500 shadow-sm mx-auto">
+            class="w-20 h-20 rounded-full object-cover border-2 border-medical-500 shadow-sm mx-auto">
           <span
-            class="bg-medical-600 text-white text-[9px] px-2 py-0.5 rounded-full absolute -bottom-2 left-1/2 -translate-x-1/2">เช็คอิน</span>
+            class="bg-medical-600 text-white text-[11px] px-3 py-1 rounded-full absolute -bottom-2.5 left-1/2 -translate-x-1/2 shadow">เช็คอิน</span>
         </div>
       </div>
 
-      <div class="text-center border-b border-slate-100 pb-4 mb-4">
-        <h3 id="m-name" class="font-bold text-lg text-slate-800">ชื่อนิสิต</h3>
-        <p id="m-id" class="text-xs text-slate-500 font-medium">รหัส: 00000 | ปี -</p>
+      <div class="text-center border-b border-slate-100 pb-5 mb-5 mt-2">
+        <h3 id="m-name" class="font-bold text-xl text-slate-800">ชื่อนิสิต</h3>
+        <p id="m-id" class="text-sm text-slate-500 font-medium mt-1">รหัส: 00000 | ปี -</p>
       </div>
 
-      <div class="space-y-3 text-sm">
-        <div class="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-          <span class="text-slate-500 font-bold"><i class="fas fa-tag w-5"></i> สถานะ</span>
+      <div class="space-y-3.5 text-base">
+        <div class="flex justify-between items-center bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+          <span class="text-slate-500 font-bold"><i class="fas fa-tag w-6"></i> สถานะ</span>
           <span id="m-status" class="font-bold text-medical-700">เข้างาน</span>
         </div>
-        <div class="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-          <span class="text-slate-500 font-bold"><i class="far fa-calendar w-5"></i> วันที่/เวลา</span>
+        <div class="flex justify-between items-center bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+          <span class="text-slate-500 font-bold"><i class="far fa-calendar w-6"></i> วันที่/เวลา</span>
           <div class="text-right">
-            <div id="m-date" class="font-bold text-slate-800 text-xs">01/01/2024</div>
-            <div id="m-time" class="font-bold text-medical-600 text-sm">08:00 น.</div>
+            <div id="m-date" class="font-bold text-slate-800 text-sm">01/01/2024</div>
+            <div id="m-time" class="font-bold text-medical-600 text-base mt-0.5">08:00 น.</div>
           </div>
         </div>
-        <div class="flex justify-between items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-          <span class="text-slate-500 font-bold"><i class="fas fa-hourglass-half w-5"></i> ความล่าช้า</span>
+        <div class="flex justify-between items-center bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+          <span class="text-slate-500 font-bold"><i class="fas fa-hourglass-half w-6"></i> ความล่าช้า</span>
           <span id="m-delay" class="font-bold">-</span>
         </div>
-        <div>
-          <span class="text-slate-500 font-bold text-xs"><i class="fas fa-map-marker-alt w-4"></i> สถานที่</span>
+        <div class="pt-2">
+          <span class="text-slate-500 font-bold text-sm"><i class="fas fa-map-marker-alt w-5"></i> สถานที่พิกัด</span>
           <p id="m-location"
-            class="mt-1 text-[11px] text-slate-600 bg-blue-50 p-2 rounded-lg border border-blue-100 leading-relaxed">
+            class="mt-2 text-sm text-slate-700 bg-blue-50 p-3 rounded-xl border border-blue-100 leading-relaxed">
             กำลังโหลด...</p>
         </div>
-        <div>
-          <span class="text-slate-500 font-bold text-xs"><i class="fas fa-comment-dots w-4"></i> หมายเหตุ</span>
-          <p id="m-note" class="mt-1 text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-100">-
-          </p>
+        <div class="pt-1">
+          <span class="text-slate-500 font-bold text-sm"><i class="fas fa-comment-dots w-5"></i> หมายเหตุ</span>
+          <p id="m-note" class="mt-2 text-sm text-amber-800 bg-amber-50 p-3 rounded-xl border border-amber-100">-</p>
         </div>
       </div>
 
       <button onclick="closeModal()"
-        class="w-full mt-6 bg-slate-800 text-white font-bold py-3.5 rounded-xl active:bg-slate-900 transition">
+        class="w-full mt-8 bg-slate-800 text-white text-lg font-bold py-4 rounded-2xl active:bg-slate-900 transition shadow-lg">
         ปิดหน้าต่าง
       </button>
     </div>
