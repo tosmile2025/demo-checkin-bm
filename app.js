@@ -2,12 +2,14 @@
 // 🏥 MEDICAL TIME ATTENDANCE SYSTEM (SPA)
 // ==========================================
 
-// ระบบพิกัดเป้าหมาย (ดึงค่าเริ่มต้นจาก config.js มาเตรียมไว้ก่อน)
-let TARGET_MAP_SETTINGS = {
+// 🌟 ระบบพิกัดเป้าหมาย (เปลี่ยนจาก Object เดี่ยว เป็น Array เพื่อรองรับหลายหมุด)
+let TARGET_LOCATIONS = [{
+    id: 'default',
+    name: 'จุดเริ่มต้น',
     lat: CONFIG.TARGET_LATITUDE,
     lng: CONFIG.TARGET_LONGITUDE,
     range: CONFIG.ALLOWED_RANGE_METERS
-};
+}];
 
 let currentUserData = null;
 let currentUserId = null;
@@ -30,7 +32,7 @@ let userMarker = null;
 // ==========================================
 window.onload = async function () {
     startClock();
-    await fetchMapSettings(); // ⚡ ดึงพิกัดจาก Google Sheet
+    await fetchMapSettings(); // ⚡ ดึงพิกัดทั้งหมดจาก Google Sheet
     await initializeLiff();
 };
 
@@ -42,7 +44,7 @@ function startClock() {
     }, 1000);
 }
 
-// ⚡ ฟังก์ชันโหลดข้อมูลพิกัดจาก Google Sheet
+// ⚡ ฟังก์ชันโหลดข้อมูลพิกัดจาก Google Sheet (รองรับหลายหมุด)
 async function fetchMapSettings() {
     try {
         const res = await fetch(CONFIG.WEB_APP_API, {
@@ -50,10 +52,13 @@ async function fetchMapSettings() {
             body: JSON.stringify({ action: 'getSettings' })
         });
         const data = await res.json();
-        if (data && data.lat) {
-            TARGET_MAP_SETTINGS.lat = parseFloat(data.lat);
-            TARGET_MAP_SETTINGS.lng = parseFloat(data.lng);
-            TARGET_MAP_SETTINGS.range = parseInt(data.range);
+
+        // ถ้าแอดมินอัปเกรดเป็นหลายหมุดแล้ว จะคืนค่าเป็น Array
+        if (Array.isArray(data) && data.length > 0) {
+            TARGET_LOCATIONS = data;
+        } else if (data && data.lat) {
+            // เผื่อระบบยังเป็นแบบเก่า (หมุดเดียว)
+            TARGET_LOCATIONS = [{ id: 'old', name: 'จุดหลัก', lat: parseFloat(data.lat), lng: parseFloat(data.lng), range: parseInt(data.range) }];
         }
     } catch (e) {
         console.warn("ไม่สามารถโหลดตั้งค่าหมุดได้ จะใช้ค่าเริ่มต้นจาก config.js แทน", e);
@@ -225,18 +230,16 @@ function setupCheckinView() {
     document.getElementById('chk-name').textContent = currentUserData[2];
     document.getElementById('chk-details').textContent = `รหัส: ${currentUserData[3]} | ${currentUserData[4]}`;
 
-    // เอารูปที่เคยลงทะเบียนมาแสดง
     if (currentUserData[5] && currentUserData[5].startsWith('http')) {
         document.getElementById('chk-profile-img').src = currentUserData[5];
     }
 
     startCamera('chk');
-    startBackgroundGPS(); // ⚡ เริ่มจับ GPS ทันทีที่เปิดหน้า
+    startBackgroundGPS();
 
     document.getElementById('btn-checkin').onclick = processOneClickCheckin;
 }
 
-// ⚡ พื้นหลัง GPS (Pre-fetching)
 function startBackgroundGPS() {
     if (navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(
@@ -255,22 +258,32 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// 🌟 อัปเกรดให้ลูปเช็คกับทุกหมุด
 async function executeCheckin(lat, lng) {
-    // ⚡ เปลี่ยนมาใช้ TARGET_MAP_SETTINGS
-    const distance = calculateDistance(lat, lng, TARGET_MAP_SETTINGS.lat, TARGET_MAP_SETTINGS.lng);
+    let inRange = false;
+    let nearestDistance = Infinity;
+    let targetLocationName = "ไม่ทราบสถานที่";
 
-    if (distance > TARGET_MAP_SETTINGS.range) {
-        return Swal.fire({ icon: "error", title: "อยู่นอกพื้นที่!", text: `คุณอยู่ห่างจากเป้าหมาย ${distance.toFixed(0)} เมตร`, confirmButtonColor: "#0f766e" });
+    // เทียบระยะทางกับหมุดทุกตัวในระบบ
+    for (const loc of TARGET_LOCATIONS) {
+        const distance = calculateDistance(lat, lng, loc.lat, loc.lng);
+        if (distance < nearestDistance) nearestDistance = distance;
+
+        // ถ้าเข้าเงื่อนไขหมุดใดหมุดหนึ่ง ถือว่าผ่านทันที
+        if (distance <= loc.range) {
+            inRange = true;
+            targetLocationName = loc.name;
+            break;
+        }
+    }
+
+    if (!inRange) {
+        return Swal.fire({ icon: "error", title: "อยู่นอกพื้นที่!", text: `คุณอยู่ห่างจากจุดลงเวลาที่ใกล้ที่สุด ${nearestDistance.toFixed(0)} เมตร`, confirmButtonColor: "#0f766e" });
     }
 
     const capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
     const jobType = document.querySelector('input[name="job-type"]:checked').value;
     const note = document.getElementById('chk-note').value;
-
-    let addressName = "ตรวจสอบพิกัดสำเร็จ";
-    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
-        .then(res => res.json())
-        .then(data => { if (data.display_name) addressName = data.display_name; }).catch(() => { });
 
     const now = new Date();
     const payload = {
@@ -283,7 +296,7 @@ async function executeCheckin(lat, lng) {
         time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
         lat: lat,
         long: lng,
-        address: addressName,
+        address: targetLocationName, // บันทึกชื่อวอร์ดแทนที่อยู่แบบเดิม
         user: currentUserId
     };
 
@@ -297,7 +310,6 @@ async function executeCheckin(lat, lng) {
 function processOneClickCheckin() {
     Swal.fire({ title: 'กำลังประมวลผล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-    // ⚡ ใช้ GPS ที่แอบจับไว้แล้ว ถ้ามี!
     if (cachedLocation) {
         executeCheckin(cachedLocation.latitude, cachedLocation.longitude);
     } else {
@@ -311,7 +323,7 @@ function processOneClickCheckin() {
 }
 
 // ==========================================
-// 🗺️ 5. MAP MODAL (LEAFLET)
+// 🗺️ 5. MAP MODAL (LEAFLET) 
 // ==========================================
 function openMapModal() {
     document.getElementById('mapModal').classList.remove('hidden');
@@ -329,13 +341,22 @@ function openMapModal() {
             const userLat = pos.coords.latitude;
             const userLng = pos.coords.longitude;
 
-            // ⚡ เปลี่ยนมาใช้ TARGET_MAP_SETTINGS
-            const dist = calculateDistance(userLat, userLng, TARGET_MAP_SETTINGS.lat, TARGET_MAP_SETTINGS.lng);
+            // 🌟 หาหมุดที่ใกล้ที่สุดเพื่อแสดงตัวเลขแจ้งเตือน
+            let nearestDistance = Infinity;
+            let nearestRange = 30;
 
-            let distText = dist <= TARGET_MAP_SETTINGS.range
-                ? `<span class="text-emerald-600">อยู่ในระยะ (${dist.toFixed(0)} ม.)</span>`
-                : `<span class="text-rose-600">อยู่นอกระยะ (${dist.toFixed(0)} ม.)</span>`;
-            document.getElementById('mapDistanceText').innerHTML = `ระยะห่างจากจุดเป้าหมาย: ${distText}`;
+            for (const loc of TARGET_LOCATIONS) {
+                const dist = calculateDistance(userLat, userLng, loc.lat, loc.lng);
+                if (dist < nearestDistance) {
+                    nearestDistance = dist;
+                    nearestRange = loc.range;
+                }
+            }
+
+            let distText = nearestDistance <= nearestRange
+                ? `<span class="text-emerald-600">อยู่ในระยะ (${nearestDistance.toFixed(0)} ม.)</span>`
+                : `<span class="text-rose-600">อยู่นอกระยะ (${nearestDistance.toFixed(0)} ม.)</span>`;
+            document.getElementById('mapDistanceText').innerHTML = `ระยะห่างจากจุดใกล้สุด: ${distText}`;
 
             initOrUpdateMap(userLat, userLng);
         },
@@ -345,23 +366,27 @@ function openMapModal() {
     );
 }
 
+// 🌟 อัปเกรดให้วาดลงแผนที่ได้หลายวงกลม/หลายหมุด
 function initOrUpdateMap(userLat, userLng) {
     if (!leafletMap) {
-        // ⚡ เปลี่ยนมาใช้ TARGET_MAP_SETTINGS
-        leafletMap = L.map('map').setView([TARGET_MAP_SETTINGS.lat, TARGET_MAP_SETTINGS.lng], 18);
+        // ใช้หมุดแรกเป็นจุดกึ่งกลางตอนเปิดแผนที่
+        leafletMap = L.map('map').setView([TARGET_LOCATIONS[0].lat, TARGET_LOCATIONS[0].lng], 16);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(leafletMap);
 
-        L.circle([TARGET_MAP_SETTINGS.lat, TARGET_MAP_SETTINGS.lng], {
-            color: '#e11d48',
-            fillColor: '#f43f5e',
-            fillOpacity: 0.2,
-            radius: TARGET_MAP_SETTINGS.range
-        }).addTo(leafletMap);
+        // วาดหมุดและวงกลมของทุกสถานที่
+        TARGET_LOCATIONS.forEach(loc => {
+            L.circle([loc.lat, loc.lng], {
+                color: '#0f766e',
+                fillColor: '#14b8a6',
+                fillOpacity: 0.2,
+                radius: loc.range
+            }).addTo(leafletMap);
 
-        L.marker([TARGET_MAP_SETTINGS.lat, TARGET_MAP_SETTINGS.lng]).addTo(leafletMap)
-            .bindPopup("<b>จุดลงเวลา</b><br>กรุณาเดินมาที่รัศมีวงกลม").openPopup();
+            L.marker([loc.lat, loc.lng]).addTo(leafletMap)
+                .bindPopup(`<b>${loc.name}</b>`);
+        });
     }
 
     const customIcon = L.divIcon({ className: 'pulsing-dot', iconSize: [14, 14], iconAnchor: [7, 7] });
@@ -369,8 +394,8 @@ function initOrUpdateMap(userLat, userLng) {
     if (userMarker) leafletMap.removeLayer(userMarker);
     userMarker = L.marker([userLat, userLng], { icon: customIcon }).addTo(leafletMap).bindPopup("ตำแหน่งของคุณ");
 
-    // ⚡ เปลี่ยนมาใช้ TARGET_MAP_SETTINGS
-    const bounds = L.latLngBounds([[TARGET_MAP_SETTINGS.lat, TARGET_MAP_SETTINGS.lng], [userLat, userLng]]);
+    // ซูมให้เห็นพิกัดของผู้ใช้เทียบกับพิกัดหมุดแรก
+    const bounds = L.latLngBounds([[TARGET_LOCATIONS[0].lat, TARGET_LOCATIONS[0].lng], [userLat, userLng]]);
     leafletMap.fitBounds(bounds, { padding: [30, 30] });
 
     setTimeout(() => leafletMap.invalidateSize(), 300);
@@ -388,7 +413,6 @@ function closeMapModal() {
 async function sendFlexMessage(data) {
     const jobColor = data.job === 'เข้าเวร' ? '#0f766e' : data.job === 'ออกเวร' ? '#e11d48' : '#d97706';
 
-    // แปลงวันที่ปัจจุบันให้เป็นรูปแบบ "31 มี.ค. 2569"
     const now = new Date();
     const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
     const displayThaiDate = `${now.getDate()} ${thaiMonths[now.getMonth()]} ${now.getFullYear() + 543}`;
@@ -402,7 +426,6 @@ async function sendFlexMessage(data) {
                 contents: [
                     { type: "box", layout: "horizontal", contents: [{ type: "text", text: "บันทึกเวลาปฏิบัติงาน", weight: "bold", size: "md", color: "#1e293b" }, { type: "text", text: data.job, weight: "bold", size: "md", color: jobColor, align: "end" }] },
                     { type: "separator" },
-                    // 🌟 รหัสนิสิต และ ชื่อ-นามสกุล รวมอยู่ในบรรทัดเดียวกัน
                     {
                         type: "box", layout: "vertical", spacing: "sm", contents: [
                             {
@@ -414,7 +437,6 @@ async function sendFlexMessage(data) {
                         ]
                     },
                     { type: "separator" },
-                    // วันที่และเวลา
                     {
                         type: "box", layout: "vertical", contents: [
                             { type: "box", layout: "baseline", contents: [{ type: "text", text: "วันที่", weight: "bold", color: "#64748b", flex: 2 }, { type: "text", text: displayThaiDate, weight: "bold", align: "end", color: "#0f172a", flex: 5 }] },
@@ -422,7 +444,6 @@ async function sendFlexMessage(data) {
                         ]
                     },
                     { type: "separator" },
-                    // สถานที่
                     {
                         type: "box", layout: "vertical", spacing: "xs", contents: [
                             { type: "text", text: "สถานที่", weight: "bold", size: "xs", color: "#64748b" },

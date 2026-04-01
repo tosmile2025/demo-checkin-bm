@@ -22,7 +22,7 @@ const DEFAULT_AVATAR = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6
 document.addEventListener('DOMContentLoaded', () => {
     fetchDataAndDisplay();
 
-    const filterInputs = ['filterSearch', 'filterDept', 'filterIn', 'filterDuring', 'filterOut', 'startDate', 'endDate', 'startTime', 'endTime'];
+    const filterInputs = ['filterSearch', 'filterDept', 'filterIn', 'filterWard', 'filterOut', 'startDate', 'endDate', 'startTime', 'endTime'];
     filterInputs.forEach(id => {
         document.getElementById(id).addEventListener('input', () => {
             currentPage = 1; applyFiltersAndRender();
