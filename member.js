@@ -7,6 +7,9 @@ let currentPage = 1;
 let tableData = [];
 let filteredData = [];
 
+// รูประบบพื้นฐาน (กรณีไม่มีรูปโปรไฟล์ จะได้ไม่โดนเครือข่ายบล็อก)
+const DEFAULT_AVATAR = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/No-Image-Placeholder.svg/330px-No-Image-Placeholder.svg.png";
+
 // ฟังก์ชันเปิด/ปิด Loading ที่ปุ่ม
 function setButtonState(buttonElement, isLoading, originalText, loadingText) {
     if (!buttonElement) return;
@@ -23,19 +26,30 @@ function setButtonState(buttonElement, isLoading, originalText, loadingText) {
 }
 
 // ==========================================
-// 📡 FETCH DATA
+// 📡 FETCH DATA (อัปเกรดเป็น POST เพื่อแก้ปัญหาการโหลดข้อมูล)
 // ==========================================
 async function fetchData() {
     const tableBody = document.querySelector("#data-table tbody");
+    tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-16 text-slate-400"><div class="animate-spin rounded-full h-8 w-8 border-4 border-medical-200 border-t-medical-600 mx-auto mb-3"></div><div class="font-medium text-base">กำลังโหลดข้อมูล...</div></td></tr>`;
 
     try {
-        const response = await fetch(`${CONFIG.WEB_APP_API}?source=member`);
+        // 🌟 แก้ไขเป็น POST Request เพื่อป้องกัน Google บล็อก
+        const response = await fetch(CONFIG.WEB_APP_API, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'fetchData', source: 'member' })
+        });
+
         if (!response.ok) throw new Error('HTTP error');
 
         const data = await response.json();
-        tableData = data.slice(1); // ตัด Header 
-        applyFilters();
+        if (Array.isArray(data)) {
+            tableData = data.slice(1); // ตัด Header ออก
+            applyFilters();
+        } else {
+            throw new Error('Data is not an array');
+        }
     } catch (error) {
+        console.error("Fetch Data Error:", error);
         tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-16 text-rose-500 font-bold"><i class="fas fa-exclamation-circle text-3xl mb-3 block"></i>ไม่สามารถโหลดข้อมูลได้</td></tr>`;
     }
 }
@@ -57,13 +71,16 @@ function renderTable() {
     }
 
     pageData.forEach((row) => {
-        // [0]ID, [1]UserID, [2]ชื่อ, [3]รหัสนิสิต, [4]ชั้นปี, [5]รูปภาพ, 
-        // [7]เวลาเข้า, [8]ลาพักร้อน, [9]ลากิจ, [10]ลาป่วย, [11]OT, [12]เวลาออก
         const id = row[0] || "-";
         const name = row[2] || "ไม่ระบุชื่อ";
         const empCode = row[3] || "-";
         const dept = row[4] || "-";
-        const imgUrl = row[5] || 'https://via.placeholder.com/60';
+
+        // 🌟 ใช้รูปภาพ Default ถ้าไม่มีรูป ป้องกันเว็บพัง
+        let imgUrl = row[5];
+        if (!imgUrl || imgUrl.trim() === "" || !imgUrl.startsWith("http")) {
+            imgUrl = DEFAULT_AVATAR;
+        }
 
         const expectedIn = row[7] || "-";
         const expectedOut = row[12] || "-";
@@ -145,7 +162,13 @@ function openEditModal(row) {
     document.getElementById("edit-name").value = row[2] || "";
     document.getElementById("edit-employeeID").value = row[3] || "";
     document.getElementById("edit-department").value = row[4] || "";
+
+    let imgUrl = row[5];
+    if (!imgUrl || imgUrl.trim() === "" || !imgUrl.startsWith("http")) {
+        imgUrl = DEFAULT_AVATAR;
+    }
     document.getElementById("edit-imageUrl").value = row[5] || "";
+    document.getElementById("preview-image").src = imgUrl;
 
     document.getElementById("edit-workStart").value = row[7] || "";
     document.getElementById("edit-vacationLeave").value = row[8] || "0";
@@ -155,7 +178,6 @@ function openEditModal(row) {
     document.getElementById("edit-workEnd").value = row[12] || "";
 
     document.getElementById("edit-image").value = "";
-    document.getElementById("preview-image").src = row[5] || "https://via.placeholder.com/150";
 
     modal.classList.remove("hidden");
     setTimeout(() => {
@@ -311,11 +333,9 @@ function applyFilters() {
     filteredData = tableData.filter((row) => {
         const name = (row[2] || "").toLowerCase();
         const empId = (row[3] || "").toLowerCase();
-        const dept = (row[4] || "").toString(); // ชั้นปี
+        const dept = (row[4] || "").toString();
 
-        // กรองชื่อและรหัส
         if (searchVal && !name.includes(searchVal) && !empId.includes(searchVal)) return false;
-        // 🌟 กรองชั้นปี
         if (yearVal && dept !== yearVal) return false;
 
         return true;
