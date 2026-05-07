@@ -1,101 +1,103 @@
 // ==========================================
-// 📍 INDEX CHECK-IN SYSTEM (ระบบบันทึกการเข้างาน)
+// 📍 INDEX & CHECK-IN SYSTEM (ศูนย์แพทย์ พุทธชินราช)
 // ==========================================
 
+// ตัวแปรส่วนกลาง
+let currentUser = { id: "", name: "", role: "" };
+let currentLocation = { lat: 0, lng: 0, address: "" };
+let currentStream = null;
+let currentFacingMode = "user";
+let isMirrored = true;
+let mapInstance = null;
+let markerInstance = null;
+let capturedRegImage = ""; // เก็บรูปตอนลงทะเบียน
+
 // ==========================================
-// 🎨 DYNAMIC THEME SYSTEM (ระบบสีอัจฉริยะ โหลดไว)
+// 🎨 1. DYNAMIC THEME SYSTEM (ระบบสีโหลด 0 วินาที)
 // ==========================================
-async function loadAndApplyTheme() {
-    // 1. ดึงสีจาก Local Storage มาใช้ทันทีก่อน (0 วินาที ระบบไม่ช้า)
+loadAndApplyTheme();
+
+function loadAndApplyTheme() {
     const cachedColor = localStorage.getItem('appThemeColor');
-    if (cachedColor) {
-        applyTheme(cachedColor);
-    }
+    if (cachedColor) applyTheme(cachedColor);
 
-    // 2. ยิง API แบบ Background เพื่อเช็คว่าแอดมินเปลี่ยนสีใหม่ไหม
-    try {
-        const res = await fetch(CONFIG.WEB_APP_API, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'getTheme' })
-        });
-        const data = await res.json();
-
-        if (data.color && data.color !== cachedColor) {
-            // ถ้าสีใหม่ไม่ตรงกับของเดิม ให้บันทึกทับแล้วเปลี่ยนสีหน้าเว็บทันที
-            localStorage.setItem('appThemeColor', data.color);
-            applyTheme(data.color);
-        }
-    } catch (error) {
-        console.log("เช็คอัปเดตสีล้มเหลว ใช้สีเดิมต่อไป");
-    }
+    fetch(CONFIG.WEB_APP_API, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getTheme' })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.color && data.color !== cachedColor) {
+                localStorage.setItem('appThemeColor', data.color);
+                applyTheme(data.color);
+            }
+        })
+        .catch(error => console.log("Theme Fetch Error"));
 }
 
-// ฟังก์ชันเขียน CSS ทับ Tailwind Class หลัก (medical-700)
 function applyTheme(hexColor) {
     if (!hexColor || hexColor === '') return;
-
     let styleTag = document.getElementById('dynamic-theme');
     if (!styleTag) {
         styleTag = document.createElement('style');
         styleTag.id = 'dynamic-theme';
         document.head.appendChild(styleTag);
     }
-
-    // บังคับเปลี่ยนสีจุดสำคัญๆ ที่ใช้คลาส medical-700
     styleTag.innerHTML = `
         .bg-medical-700 { background-color: ${hexColor} !important; }
         .text-medical-700 { color: ${hexColor} !important; }
         .border-medical-700 { border-color: ${hexColor} !important; }
-        .focus\\:border-medical-500:focus { border-color: ${hexColor} !important; }
-        .hover\\:bg-medical-800:hover { filter: brightness(0.9); background-color: ${hexColor} !important; }
-        .bg-medical-50 { background-color: ${hexColor}15 !important; } /* ความโปร่งใส 15% */
+        .from-medical-600 { --tw-gradient-from: ${hexColor} !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+        .to-medical-700 { --tw-gradient-to: ${hexColor} !important; }
         .text-medical-600 { color: ${hexColor} !important; }
+        .bg-medical-50 { background-color: ${hexColor}15 !important; }
+        input[type="radio"]:checked + label {
+            background-color: ${hexColor} !important;
+            color: white !important;
+            border-color: ${hexColor} !important;
+            box-shadow: 0 4px 6px -1px ${hexColor}40 !important;
+        }
     `;
 }
 
-
-
 // ==========================================
-// 🚀 INITIALIZE LIFF & DATA FETCH
+// 🚀 2. INITIALIZE & LIFF
 // ==========================================
-window.onload = async function () {
-    // บังคับค่า jobInput เป็น 'เข้างาน' 
-    document.getElementById("jobInput").value = "เข้างาน";
-
-    // 🌟 1. เพิ่มคำสั่งโหลดตำแหน่งตรงนี้
-    await loadRolesToRegistration();
-
-    await initializeLiff();
-
-    // 🚀 เรียกใช้งานทันที
-    loadAndApplyTheme();
-};
+document.addEventListener("DOMContentLoaded", () => {
+    loadRolesToRegistration();
+    initializeLiff();
+    getLocation(); // เริ่มหาพิกัดทันที
+    setInterval(updateDateTime, 1000);
+    updateDateTime();
+});
 
 async function initializeLiff() {
     try {
         await liff.init({ liffId: CONFIG.LIFF_ID_CHECKIN });
         if (liff.isLoggedIn()) {
-            getUserProfile();
+            await getUserProfile();
         } else {
             liff.login();
         }
     } catch (error) {
-        console.error("Error initializing LIFF:", error);
+        showErrorState("ไม่สามารถเริ่มระบบ LINE ได้");
     }
 }
 
 async function getUserProfile() {
     try {
         const profile = await liff.getProfile();
-        document.getElementById("userId").value = profile.userId;
-        await fetchData(profile.userId);
+        currentUser.id = profile.userId;
+        const lineIdInput = document.getElementById("reg-lineId");
+        if (lineIdInput) lineIdInput.value = profile.userId;
+        await checkUserRegistration(profile.userId);
     } catch (error) {
-        console.error("Error getting profile data:", error);
+        showErrorState("ไม่สามารถดึงข้อมูลโปรไฟล์ได้");
     }
 }
 
 // ==========================================
-// 📡 FETCH ROLES (ดึงข้อมูลตำแหน่งจาก Google Sheet)
+// 📡 3. ROUTING & DATA FETCH
 // ==========================================
 async function loadRolesToRegistration() {
     try {
@@ -104,343 +106,387 @@ async function loadRolesToRegistration() {
             body: JSON.stringify({ action: 'getRoles' })
         });
         const roles = await res.json();
-
         const deptSelect = document.getElementById('reg-dept');
-
-        // 🌟 ป้องกัน Error ถ้าหน้าเว็บนี้ไม่มีกล่อง reg-dept ให้ข้ามการทำงานไปเลย
         if (!deptSelect) return;
 
-        // เคลียร์ค่าและตั้งค่าเริ่มต้น
         deptSelect.innerHTML = '<option value="" disabled selected>-- เลือกตำแหน่ง / ชั้นปี --</option>';
-
-        // วนลูปเอาข้อมูลตำแหน่งมาสร้างเป็นตัวเลือก
         roles.forEach(role => {
             const option = document.createElement('option');
             option.value = role.name;
             option.textContent = role.name;
             deptSelect.appendChild(option);
         });
-
-    } catch (error) {
-        console.error("Error loading roles:", error);
-    }
+    } catch (error) { console.error("Error loading roles"); }
 }
 
-async function fetchData(userId) {
-    showLoading(true);
+async function checkUserRegistration(userId) {
     try {
         const response = await fetch(CONFIG.WEB_APP_API, {
             method: "POST",
-            body: JSON.stringify({ action: "fetchData", source: "member", userId: userId }),
+            body: JSON.stringify({ action: "fetchData", source: "member" })
         });
         const data = await response.json();
-
         const userRows = data.filter((row) => row[1] === userId);
-        if (userRows.length > 0) {
-            userRows.sort((a, b) => new Date(b[6]) - new Date(a[6]));
-            displayData(userRows[0]);
-        }
+
+        const loadingView = document.getElementById("loadingView");
+        loadingView.classList.add("opacity-0", "pointer-events-none");
+
+        setTimeout(() => {
+            loadingView.classList.add("hidden");
+            if (userRows.length > 0) {
+                // เคยลงทะเบียนแล้ว -> ไปหน้า Check-in
+                userRows.sort((a, b) => new Date(b[6]) - new Date(a[6]));
+                setupCheckinView(userRows[0]);
+                document.getElementById("checkinView").classList.remove("hidden");
+                startCamera('chk');
+            } else {
+                // ยังไม่ลงทะเบียน -> ไปหน้า Register
+                document.getElementById("registerView").classList.remove("hidden");
+                startCamera('reg');
+            }
+        }, 500);
     } catch (error) {
-        console.error("Error fetching data:", error);
-    } finally {
-        showLoading(false);
+        showErrorState("ไม่สามารถดึงข้อมูลจากฐานข้อมูลได้");
     }
 }
 
-function displayData(row) {
-    document.getElementById("columnAData").value = row[1] || "";
-    document.getElementById("columnBData").value = row[2] || "";
-    document.getElementById("columnCData").value = row[3] || "";
-    document.getElementById("columnDData").value = row[4] || "";
+function setupCheckinView(row) {
+    currentUser.name = row[2] || "ไม่ระบุชื่อ";
+    currentUser.role = row[4] || "ไม่ระบุตำแหน่ง";
+    const profileImg = row[5] || "https://via.placeholder.com/100";
+
+    document.getElementById("chk-name").textContent = currentUser.name;
+    document.getElementById("chk-details").textContent = currentUser.role;
+
+    const imgEl = document.getElementById("chk-profile-img");
+    if (imgEl && profileImg.startsWith("http")) imgEl.src = profileImg;
 }
 
-function showLoading(isLoading) {
-    const overlay = document.getElementById("loadingOverlay");
-    if (isLoading) {
-        overlay.classList.remove("hidden");
-        overlay.classList.add("flex");
-    } else {
-        overlay.classList.remove("flex");
-        overlay.classList.add("hidden");
-    }
-}
-
-// ==========================================
-// 📸 CAMERA SYSTEM (ระบบกล้องถ่ายรูป)
-// ==========================================
-const previewImage = document.getElementById("preview");
-const video = document.getElementById("camera-preview");
-
-document.addEventListener("DOMContentLoaded", function () {
-    const startCameraBtn = document.getElementById("start-camera-btn");
-    const captureBtn = document.getElementById("capture-btn");
-    const switchCameraBtn = document.getElementById("switch-camera-btn");
-
-    let stream;
-    let currentFacingMode = "user"; // เริ่มที่กล้องหน้า
-
-    function startCamera() {
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } })
-            .then(function (videoStream) {
-                stream = videoStream;
-                video.srcObject = videoStream;
-                captureBtn.disabled = false;
-                switchCameraBtn.disabled = false;
-                video.style.display = "block";
-                previewImage.style.display = "none";
-            })
-            .catch(function (error) {
-                console.error("Error accessing the camera: ", error);
-                Swal.fire("ข้อผิดพลาด", "ไม่สามารถเข้าถึงกล้องได้ กรุณาตรวจสอบการอนุญาต", "error");
-            });
-    }
-
-    function capturePhoto() {
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        previewImage.src = canvas.toDataURL("image/png");
-        previewImage.style.display = "block";
-        video.style.display = "none";
-    }
-
-    function switchCamera() {
-        if (stream) { stream.getTracks().forEach((track) => track.stop()); }
-        currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
-        startCamera();
-    }
-
-    startCameraBtn.addEventListener("click", startCamera);
-    captureBtn.addEventListener("click", capturePhoto);
-    switchCameraBtn.addEventListener("click", switchCamera);
-});
-
-function checkPictureAndNextStep() {
-    const capturedImage = previewImage.src;
-    if (!capturedImage || capturedImage.includes("No-Image-Placeholder")) {
-        Swal.fire({ title: "แจ้งเตือน!", text: "กรุณาถ่ายรูปก่อนที่จะไปยังขั้นตอนถัดไป", icon: "warning" });
-    } else {
-        nextStep();
-    }
+function showErrorState(msg) {
+    document.getElementById("loadingError").classList.remove("hidden");
+    document.getElementById("loadingContent").classList.add("hidden");
+    document.getElementById("loadingErrorText").textContent = msg;
 }
 
 // ==========================================
-// 📍 LOCATION SYSTEM (ระบบพิกัดและระยะห่าง)
+// 📸 4. CAMERA SYSTEM
 // ==========================================
+function startCamera(prefix) {
+    const video = document.getElementById(`${prefix}-camera-preview`);
+    if (!video) return;
+
+    if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+    }
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } })
+        .then(stream => {
+            currentStream = stream;
+            video.srcObject = stream;
+            video.style.transform = (currentFacingMode === 'user' && isMirrored) ? 'scaleX(-1)' : 'scaleX(1)';
+        })
+        .catch(error => {
+            Swal.fire("ข้อผิดพลาด", "ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตการใช้งานกล้อง", "error");
+        });
+}
+
+function switchCamera(prefix) {
+    currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
+    isMirrored = currentFacingMode === "user"; // กล้องหน้าควรกลับซ้ายขวา
+    startCamera(prefix);
+}
+
+function toggleMirror(prefix) {
+    isMirrored = !isMirrored;
+    const video = document.getElementById(`${prefix}-camera-preview`);
+    if (video) video.style.transform = isMirrored ? 'scaleX(-1)' : 'scaleX(1)';
+}
+
+// ฟังก์ชันดึงภาพจากวิดีโอ (แปลงเป็น Base64)
+function captureVideoFrame(prefix) {
+    const video = document.getElementById(`${prefix}-camera-preview`);
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+
+    // ถ้าภาพกลับซ้ายขวา ให้กลับภาพใน Canvas ด้วยก่อนส่ง
+    if (video.style.transform.includes('scaleX(-1)')) {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.8).split(",")[1];
+}
+
+// การจัดการกล้องหน้าลงทะเบียน
+const regCaptureBtn = document.getElementById('reg-capture-btn');
+const regRetakeBtn = document.getElementById('reg-retake-btn');
+if (regCaptureBtn) {
+    regCaptureBtn.addEventListener('click', () => {
+        const video = document.getElementById('reg-camera-preview');
+        const img = document.getElementById('reg-preview');
+        capturedRegImage = captureVideoFrame('reg');
+        img.src = "data:image/jpeg;base64," + capturedRegImage;
+        img.style.transform = video.style.transform;
+
+        video.classList.add('hidden');
+        img.classList.remove('hidden');
+        document.getElementById('reg-camera-guide').classList.add('hidden');
+        regCaptureBtn.classList.add('hidden');
+        regRetakeBtn.classList.remove('hidden');
+    });
+}
+if (regRetakeBtn) {
+    regRetakeBtn.addEventListener('click', () => {
+        capturedRegImage = "";
+        document.getElementById('reg-camera-preview').classList.remove('hidden');
+        document.getElementById('reg-preview').classList.add('hidden');
+        document.getElementById('reg-camera-guide').classList.remove('hidden');
+        regCaptureBtn.classList.remove('hidden');
+        regRetakeBtn.classList.add('hidden');
+    });
+}
+
+// ==========================================
+// 📍 5. LOCATION & LEAFLET MAP
+// ==========================================
+function getLocation() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                currentLocation.lat = position.coords.latitude;
+                currentLocation.lng = position.coords.longitude;
+                checkDistance();
+                fetchAddress(currentLocation.lat, currentLocation.lng);
+                initMap(currentLocation.lat, currentLocation.lng);
+            },
+            (error) => { console.warn("Location error:", error); },
+            { enableHighAccuracy: true }
+        );
+    }
+}
+
 function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // รัศมีโลก
-    const p1 = (lat1 * Math.PI) / 180;
-    const p2 = (lat2 * Math.PI) / 180;
-    const dp = ((lat2 - lat1) * Math.PI) / 180;
-    const dl = ((lon2 - lon1) * Math.PI) / 180;
+    const R = 6371e3;
+    const p1 = lat1 * Math.PI / 180;
+    const p2 = lat2 * Math.PI / 180;
+    const dp = (lat2 - lat1) * Math.PI / 180;
+    const dl = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function getLocation() {
-    if (navigator.geolocation) {
-        Swal.fire({ title: 'กำลังค้นหาพิกัด...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
-        navigator.geolocation.getCurrentPosition(displayLocation, showError, { enableHighAccuracy: true });
-    } else {
-        Swal.fire("ไม่รองรับ", "บราวเซอร์ของคุณไม่รองรับ Geolocation", "error");
-    }
-}
-
-function showError(error) {
-    Swal.close();
-    let message = "เกิดข้อผิดพลาดที่ไม่รู้จัก";
-    if (error.code === error.PERMISSION_DENIED) message = "คุณปฏิเสธการเข้าถึงตำแหน่ง";
-    else if (error.code === error.POSITION_UNAVAILABLE) message = "ไม่สามารถค้นหาตำแหน่งได้";
-    else if (error.code === error.TIMEOUT) message = "หมดเวลาในการค้นหาตำแหน่ง";
-    Swal.fire("เกิดข้อผิดพลาด", message, "error");
-}
-
-function displayLocation(position) {
-    Swal.close();
-    const latitude = position.coords.latitude;
-    const longitude = position.coords.longitude;
-
-    document.getElementById("latitude").innerText = latitude.toFixed(6);
-    document.getElementById("longitude").innerText = longitude.toFixed(6);
-    document.getElementById("latitudeInput").value = latitude;
-    document.getElementById("longitudeInput").value = longitude;
-
-    const submitButton = document.getElementById("submitButton");
-
-    // ดึงพิกัดเป้าหมายจากไฟล์ Config.js
-    const distance = calculateDistance(latitude, longitude, CONFIG.TARGET_LATITUDE, CONFIG.TARGET_LONGITUDE);
+function checkDistance() {
+    const distance = calculateDistance(currentLocation.lat, currentLocation.lng, CONFIG.TARGET_LATITUDE, CONFIG.TARGET_LONGITUDE);
+    const distText = document.getElementById("mapDistanceText");
+    const btnCheckin = document.getElementById("btn-checkin");
 
     if (distance > CONFIG.ALLOWED_RANGE_METERS) {
-        Swal.fire({ icon: "error", title: "อยู่นอกพื้นที่!", text: `ระยะห่างจากเป้าหมาย: ${distance.toFixed(0)} เมตร (อนุญาต ${CONFIG.ALLOWED_RANGE_METERS}ม.)` });
-        submitButton.disabled = true;
-        submitButton.className = "w-2/3 py-4 rounded-2xl bg-slate-300 text-slate-500 font-bold cursor-not-allowed";
+        if (distText) distText.innerHTML = `<span class="text-rose-500 font-bold"><i class="fas fa-exclamation-circle"></i> ห่างเป้าหมาย ${distance.toFixed(0)}ม. (อนุญาต ${CONFIG.ALLOWED_RANGE_METERS}ม.)</span>`;
+        if (btnCheckin) {
+            btnCheckin.disabled = true;
+            btnCheckin.className = "w-full bg-slate-300 text-slate-500 font-bold text-lg py-4 rounded-2xl cursor-not-allowed flex items-center justify-center";
+        }
     } else {
-        Swal.fire({ icon: "success", title: "อยู่ในพื้นที่!", text: `ระยะห่าง: ${distance.toFixed(0)} เมตร`, timer: 2000, showConfirmButton: false });
-        submitButton.disabled = false;
-        submitButton.className = "w-2/3 py-4 rounded-2xl bg-slate-800 hover:bg-slate-900 text-white font-bold shadow-md transition-colors";
+        if (distText) distText.innerHTML = `<span class="text-emerald-500 font-bold"><i class="fas fa-check-circle"></i> อยู่ในพื้นที่ (${distance.toFixed(0)} ม.)</span>`;
+        if (btnCheckin) {
+            btnCheckin.disabled = false;
+            btnCheckin.className = "w-full bg-gradient-to-r from-medical-600 to-medical-700 text-white font-bold text-lg py-4 rounded-2xl shadow-[0_8px_20px_rgba(20,184,166,0.3)] hover:shadow-[0_8px_25px_rgba(20,184,166,0.4)] transition transform hover:-translate-y-0.5 flex items-center justify-center";
+            // เรียก Theme มาอัปเดตปุ่มอีกรอบ
+            applyTheme(localStorage.getItem('appThemeColor'));
+        }
     }
+}
 
-    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`)
-        .then((res) => res.json())
-        .then((data) => {
-            const addr = data.display_name || "ไม่สามารถดึงข้อมูลที่อยู่ได้";
-            document.getElementById("fullAddress").innerText = addr;
-            document.getElementById("fullAddressInput").value = addr;
-        });
+function fetchAddress(lat, lng) {
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+        .then(res => res.json())
+        .then(data => { currentLocation.address = data.display_name || "ไม่สามารถระบุตำแหน่งได้"; });
+}
 
-    document.getElementById("mapIframe").src = `https://maps.google.com/maps?q=${latitude},${longitude}&hl=th&z=15&output=embed`;
+function initMap(lat, lng) {
+    if (!document.getElementById('map')) return;
+    if (!mapInstance) {
+        mapInstance = L.map('map').setView([lat, lng], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapInstance);
+        markerInstance = L.marker([lat, lng]).addTo(mapInstance);
+    } else {
+        mapInstance.setView([lat, lng], 16);
+        markerInstance.setLatLng([lat, lng]);
+    }
+}
+
+function openMapModal() {
+    const modal = document.getElementById('mapModal');
+    const content = document.getElementById('mapModalContent');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        content.classList.remove('translate-y-full');
+        if (mapInstance) mapInstance.invalidateSize(); // แก้บัค Leaflet โหลดไม่เต็มจอ
+    }, 10);
+}
+
+function closeMapModal() {
+    const modal = document.getElementById('mapModal');
+    const content = document.getElementById('mapModalContent');
+    modal.classList.add('opacity-0');
+    content.classList.add('translate-y-full');
+    setTimeout(() => { modal.classList.add('hidden'); }, 300);
 }
 
 // ==========================================
-// ⏰ TIME & DATE SYSTEM
+// ⏱️ 6. TIME FORMATTING
 // ==========================================
 function updateDateTime() {
     const now = new Date();
-    document.getElementById("date").textContent = now.toLocaleDateString("th-TH", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-    document.getElementById("time").textContent = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Bangkok" });
-}
-setInterval(updateDateTime, 1000);
-updateDateTime();
-
-function getCurrentTimeInBangkok() {
-    const bangkokTime = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
-    return `${String(bangkokTime.getHours()).padStart(2, "0")}:${String(bangkokTime.getMinutes()).padStart(2, "0")}`;
-}
-document.getElementById("currentTime").value = getCurrentTimeInBangkok();
-
-function getFormattedDate() {
-    const today = new Date();
-    return `${String(today.getDate()).padStart(2, "0")}/${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
-}
-document.getElementById("todayInput").value = getFormattedDate();
-
-// ==========================================
-// 🔄 STEP CONTROLLER (เปลี่ยนหน้า)
-// ==========================================
-let currentStep = 1;
-function nextStep() {
-    if (currentStep < 3) {
-        document.getElementById(`step${currentStep}`).classList.add("hidden");
-        document.getElementById(`step${currentStep}`).classList.remove("flex-1", "flex", "flex-col");
-        currentStep++;
-        document.getElementById(`step${currentStep}`).classList.remove("hidden");
-        if (currentStep === 3) document.getElementById(`step${currentStep}`).classList.add("flex-1", "flex", "flex-col");
-    }
-}
-
-function prevStep() {
-    if (currentStep > 1) {
-        document.getElementById(`step${currentStep}`).classList.add("hidden");
-        document.getElementById(`step${currentStep}`).classList.remove("flex-1", "flex", "flex-col");
-        currentStep--;
-        document.getElementById(`step${currentStep}`).classList.remove("hidden");
-    }
+    const timeEl = document.getElementById("headerTime");
+    const dateEl = document.getElementById("headerDate");
+    if (timeEl) timeEl.textContent = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Bangkok" });
+    if (dateEl) dateEl.textContent = now.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
 }
 
 // ==========================================
-// 💾 SUBMIT & FLEX MESSAGE (บันทึกข้อมูล)
+// 💾 7. SUBMIT REGISTRATION
 // ==========================================
-function submitForm() {
-    const colB = document.getElementById("columnBData").value;
-    const colC = document.getElementById("columnCData").value;
-    const jobInput = document.getElementById("jobInput").value;
-    const latInput = document.getElementById("latitudeInput").value;
-    const lonInput = document.getElementById("longitudeInput").value;
+const btnRegister = document.getElementById('btn-register');
+if (btnRegister) {
+    btnRegister.addEventListener('click', async () => {
+        const name = document.getElementById('reg-name').value;
+        const empId = document.getElementById('reg-empId').value;
+        const dept = document.getElementById('reg-dept').value;
 
-    if (!colB || !colC || !jobInput || !latInput || !lonInput) {
-        Swal.fire("แจ้งเตือน!", "กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน", "warning");
-        return;
-    }
+        if (!name || !empId || !dept || !capturedRegImage) {
+            Swal.fire("ข้อมูลไม่ครบ", "กรุณากรอกข้อมูลและถ่ายรูปให้ครบถ้วน", "warning");
+            return;
+        }
 
-    Swal.fire({
-        title: "ยืนยันการบันทึกเวลา",
-        text: "คุณตรวจสอบรูปภาพและพิกัดถูกต้องแล้วใช่หรือไม่?",
-        icon: "question",
-        showCancelButton: true,
-        confirmButtonText: "บันทึกเลย",
-        cancelButtonText: "ยกเลิก"
-    }).then((result) => {
-        if (result.isConfirmed) {
-            document.getElementById("submitButton").disabled = true;
-            Swal.fire({ title: "กำลังบันทึกข้อมูล", text: "กรุณารอสักครู่...", allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+        Swal.fire({ title: "กำลังบันทึก...", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-            let obj = {
-                base64: previewImage.src.split("base64,")[1],
-                name: colB,
-                role: colC,
-                job: jobInput,
-                note: document.getElementById("noteInput").value,
-                today: document.getElementById("todayInput").value,
-                time: document.getElementById("currentTime").value,
-                lat: latInput,
-                long: lonInput,
-                address: document.getElementById("fullAddressInput").value,
-                user: document.getElementById("userId").value,
-            };
+        const payload = {
+            userlineId: currentUser.id,
+            nameId: name,
+            keynumberId: empId,
+            keynumber2Id: dept,
+            base64: capturedRegImage
+        };
 
-            fetch(CONFIG.WEB_APP_API, { method: "POST", body: JSON.stringify(obj) })
-                .then((res) => res.text())
-                .then((data) => {
-                    Swal.fire("สำเร็จ!", "บันทึกเวลาของคุณเรียบร้อย", "success").then(() => { sendFlexMessage(); });
-                })
-                .catch((error) => {
-                    Swal.fire("Error!", "การส่งข้อมูลล้มเหลว กรุณาลองใหม่", "error");
-                    document.getElementById("submitButton").disabled = false;
-                });
+        try {
+            await fetch(CONFIG.WEB_APP_API, { method: "POST", body: JSON.stringify(payload) });
+            Swal.fire({ icon: "success", title: "สำเร็จ", text: "ลงทะเบียนเรียบร้อยแล้ว", timer: 1500, showConfirmButton: false });
+            setTimeout(() => { window.location.reload(); }, 1500); // รีโหลดเพื่อเข้าหน้า Check-in
+        } catch (error) {
+            Swal.fire("ข้อผิดพลาด", "ลงทะเบียนล้มเหลว", "error");
         }
     });
 }
 
-async function sendFlexMessage() {
-    const jobValue = document.getElementById("jobInput").value;
-    const colB = document.getElementById("columnBData").value;
-    const colC = document.getElementById("columnCData").value;
-    const todayStr = document.getElementById("todayInput").value;
-    const timeStr = document.getElementById("currentTime").value;
-    const addr = document.getElementById("fullAddressInput").value;
+// ==========================================
+// 💾 8. SUBMIT CHECK-IN & LINE FLEX
+// ==========================================
+const btnCheckin = document.getElementById('btn-checkin');
+if (btnCheckin) {
+    btnCheckin.addEventListener('click', () => {
+        if (currentLocation.lat === 0) {
+            Swal.fire("รอสักครู่", "กำลังค้นหาพิกัดของคุณ...", "warning");
+            return;
+        }
 
+        Swal.fire({
+            title: "ยืนยันการบันทึกเวลา",
+            text: "ระบบจะบันทึกพิกัดและรูปภาพ ณ เวลานี้",
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonText: "บันทึกเวลา",
+            cancelButtonText: "ยกเลิก",
+            confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e"
+        }).then(async (result) => {
+            if (result.isConfirmed) {
+                btnCheckin.disabled = true;
+                Swal.fire({ title: "กำลังบันทึกข้อมูล", allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+                // ถ่ายรูปจากวิดีโอ ณ วินาทีที่กดปุ่ม
+                const checkinBase64 = captureVideoFrame('chk');
+                const selectedJob = document.querySelector('input[name="job-type"]:checked').value;
+                const noteValue = document.getElementById('chk-note').value;
+
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Bangkok" });
+                const todayStr = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`;
+
+                let obj = {
+                    base64: checkinBase64,
+                    user: currentUser.id,
+                    name: currentUser.name,
+                    role: currentUser.role,
+                    job: selectedJob,
+                    note: noteValue,
+                    lat: currentLocation.lat,
+                    long: currentLocation.lng,
+                    address: currentLocation.address,
+                    today: todayStr,
+                    time: timeStr
+                };
+
+                try {
+                    await fetch(CONFIG.WEB_APP_API, { method: "POST", body: JSON.stringify(obj) });
+                    Swal.fire("สำเร็จ!", "บันทึกเวลาของคุณเรียบร้อย", "success").then(() => {
+                        sendFlexMessage(obj);
+                    });
+                } catch (error) {
+                    Swal.fire("Error!", "การส่งข้อมูลล้มเหลว กรุณาลองใหม่", "error");
+                    btnCheckin.disabled = false;
+                }
+            }
+        });
+    });
+}
+
+async function sendFlexMessage(data) {
+    const themeColor = localStorage.getItem('appThemeColor') || "#0f766e";
     const flexMessage = {
         type: "flex",
-        altText: "จดบันทึกเวลางาน",
+        altText: "บันทึกเวลาสำเร็จ: " + data.job,
         contents: {
             type: "bubble",
+            size: "mega",
             body: {
                 type: "box", layout: "vertical", spacing: "md",
                 contents: [
                     {
-                        type: "box", layout: "horizontal",
-                        contents: [
-                            { type: "text", text: "บันทึกเวลาปฎิบัติงาน", weight: "bold", size: "md" },
-                            { type: "text", text: jobValue, weight: "bold", size: "md", color: "#0D9608", align: "end" }
+                        type: "box", layout: "horizontal", contents: [
+                            { type: "text", text: "บันทึกเวลาปฎิบัติงาน", weight: "bold", size: "md", color: themeColor },
+                            { type: "text", text: data.job, weight: "bold", size: "md", color: "#0D9608", align: "end" }
                         ]
                     },
                     { type: "separator" },
                     {
-                        type: "box", layout: "vertical", spacing: "sm",
-                        contents: [
-                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "ชื่อ นสพ.", weight: "bold", size: "sm" }, { type: "text", text: colB, size: "sm", align: "end" }] },
-                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "รหัส", weight: "bold", size: "sm" }, { type: "text", text: colC, size: "sm", align: "end" }] }
+                        type: "box", layout: "vertical", spacing: "sm", contents: [
+                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "ชื่อ", weight: "bold", size: "sm" }, { type: "text", text: data.name, size: "sm", align: "end", wrap: true }] },
+                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "ตำแหน่ง", weight: "bold", size: "sm" }, { type: "text", text: data.role, size: "sm", align: "end", color: "#666666" }] }
                         ]
                     },
                     { type: "separator" },
                     {
-                        type: "box", layout: "vertical",
-                        contents: [
-                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "วันที่", weight: "bold" }, { type: "text", text: todayStr, weight: "bold", align: "end" }] },
-                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "เวลา", weight: "bold" }, { type: "text", text: timeStr, weight: "bold", size: "xl", color: "#EF2F14", align: "end" }] }
+                        type: "box", layout: "vertical", contents: [
+                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "วันที่", weight: "bold" }, { type: "text", text: data.today, weight: "bold", align: "end" }] },
+                            { type: "box", layout: "baseline", contents: [{ type: "text", text: "เวลา", weight: "bold" }, { type: "text", text: data.time, weight: "bold", size: "xl", color: themeColor, align: "end" }] }
                         ]
                     },
                     { type: "separator" },
                     {
-                        type: "box", layout: "vertical", spacing: "xs",
-                        contents: [{ type: "text", text: "สถานที่", weight: "bold", size: "sm" }, { type: "text", text: addr || "ดึงพิกัดสำเร็จ", wrap: true, size: "xs", color: "#666666" }]
+                        type: "box", layout: "vertical", spacing: "xs", contents: [
+                            { type: "text", text: "สถานที่", weight: "bold", size: "sm" },
+                            { type: "text", text: data.address, wrap: true, size: "xs", color: "#666666" }
+                        ]
                     }
                 ]
             }
         }
     };
-    await liff.sendMessages([flexMessage]);
-    liff.closeWindow();
+    try {
+        await liff.sendMessages([flexMessage]);
+        liff.closeWindow();
+    } catch (err) { console.error("Send Flex Error", err); liff.closeWindow(); }
 }
