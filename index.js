@@ -8,6 +8,10 @@
 window.onload = async function () {
     // บังคับค่า jobInput เป็น 'เข้างาน' 
     document.getElementById("jobInput").value = "เข้างาน";
+
+    // 🌟 1. เพิ่มคำสั่งโหลดตำแหน่งตรงนี้
+    await loadRolesToRegistration();
+
     await initializeLiff();
 };
 
@@ -31,6 +35,38 @@ async function getUserProfile() {
         await fetchData(profile.userId);
     } catch (error) {
         console.error("Error getting profile data:", error);
+    }
+}
+
+// ==========================================
+// 📡 FETCH ROLES (ดึงข้อมูลตำแหน่งจาก Google Sheet)
+// ==========================================
+async function loadRolesToRegistration() {
+    try {
+        const res = await fetch(CONFIG.WEB_APP_API, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'getRoles' })
+        });
+        const roles = await res.json();
+
+        const deptSelect = document.getElementById('reg-dept');
+
+        // 🌟 ป้องกัน Error ถ้าหน้าเว็บนี้ไม่มีกล่อง reg-dept ให้ข้ามการทำงานไปเลย
+        if (!deptSelect) return;
+
+        // เคลียร์ค่าและตั้งค่าเริ่มต้น
+        deptSelect.innerHTML = '<option value="" disabled selected>-- เลือกตำแหน่ง / ชั้นปี --</option>';
+
+        // วนลูปเอาข้อมูลตำแหน่งมาสร้างเป็นตัวเลือก
+        roles.forEach(role => {
+            const option = document.createElement('option');
+            option.value = role.name;
+            option.textContent = role.name;
+            deptSelect.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error("Error loading roles:", error);
     }
 }
 

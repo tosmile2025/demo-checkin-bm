@@ -396,7 +396,37 @@ function checkAdminAuth(callback) {
     });
 }
 
+// ==========================================
+// 📡 FETCH ROLES TO FILTER (ดึงข้อมูลตำแหน่งจาก Google Sheet)
+// ==========================================
+async function loadRolesToFilter() {
+    try {
+        const res = await fetch(CONFIG.WEB_APP_API, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'getRoles' })
+        });
+        const roles = await res.json();
+
+        const filterYear = document.getElementById('filter-year');
+        filterYear.innerHTML = '<option value="">ทุกตำแหน่ง / ชั้นปี</option>'; // เคลียร์และใส่ค่าตั้งต้น
+
+        roles.forEach(role => {
+            const option = document.createElement('option');
+            option.value = role.name;
+            option.textContent = role.name;
+            // หากต้องการให้โชว์กลุ่มด้วย สามารถแก้เป็น: option.textContent = `${role.name} (${role.group})`;
+            filterYear.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error("Error loading roles:", error);
+    }
+}
+
 // โหลดข้อมูลเมื่อเปิดหน้า (ผ่านการตรวจสอบรหัส)
 window.onload = () => {
-    checkAdminAuth(fetchData);
+    checkAdminAuth(async () => {
+        await loadRolesToFilter(); // โหลดตัวเลือกตำแหน่งให้เสร็จก่อน
+        await fetchData();         // แล้วค่อยโหลดตารางข้อมูลสมาชิก
+    });
 };
