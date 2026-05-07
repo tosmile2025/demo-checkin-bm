@@ -16,7 +16,7 @@ let currentUserId = null;
 let stream;
 let currentFacingMode = "user";
 let activeCameraMode = null;
-let isMirrored = true; // 🌟 เพิ่มตัวแปรเช็คสถานะการ Mirror (ค่าเริ่มต้นเปิดใช้)
+let isMirrored = true; // 🌟 ตัวแปรเช็คสถานะการ Mirror (ค่าเริ่มต้นเปิดใช้)
 
 let watchId = null;
 let cachedLocation = null;
@@ -25,9 +25,68 @@ let leafletMap = null;
 let userMarker = null;
 
 // ==========================================
+// 🎨 0. DYNAMIC THEME SYSTEM (โหลดสี 0 วินาที)
+// ==========================================
+loadAndApplyTheme();
+
+function loadAndApplyTheme() {
+    const cachedColor = localStorage.getItem('appThemeColor');
+    if (cachedColor) applyTheme(cachedColor);
+
+    fetch(CONFIG.WEB_APP_API, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getTheme' })
+    })
+        .then(res => res.text())
+        .then(text => {
+            try {
+                const data = JSON.parse(text);
+                if (data.color) {
+                    let newColor = data.color.trim();
+                    if (!newColor.startsWith('#')) newColor = '#' + newColor;
+
+                    if (newColor !== cachedColor) {
+                        localStorage.setItem('appThemeColor', newColor);
+                        applyTheme(newColor);
+                    }
+                }
+            } catch (e) { console.error("Theme Fetch Error:", e); }
+        })
+        .catch(error => console.error("Theme Fetch Error:", error));
+}
+
+function applyTheme(hexColor) {
+    if (!hexColor || hexColor === '') return;
+
+    let styleTag = document.getElementById('dynamic-theme');
+    if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = 'dynamic-theme';
+        document.body.appendChild(styleTag);
+    }
+
+    styleTag.innerHTML = `
+        .bg-medical-700, .bg-medical-600, .bg-medical-800 { background-color: ${hexColor} !important; }
+        .text-medical-700, .text-medical-600 { color: ${hexColor} !important; }
+        .text-medical-100 { color: #f1f5f9 !important; } 
+        .border-medical-700, .border-medical-500, .border-medical-200 { border-color: ${hexColor} !important; }
+        .focus\\:border-medical-500:focus { border-color: ${hexColor} !important; }
+        .focus\\:ring-medical-500:focus { --tw-ring-color: ${hexColor} !important; }
+        .from-medical-600 { --tw-gradient-from: ${hexColor} !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+        .to-medical-700 { --tw-gradient-to: ${hexColor} !important; }
+        .bg-medical-50 { background-color: ${hexColor}1A !important; } 
+        input[type="radio"]:checked + label {
+            background-color: ${hexColor} !important;
+            color: white !important;
+            border-color: ${hexColor} !important;
+            box-shadow: 0 4px 6px -1px ${hexColor}40 !important;
+        }
+    `;
+}
+
+// ==========================================
 // 🚀 1. SYSTEM INITIALIZATION
 // ==========================================
-
 function updateLoading(percent, mainText, subText) {
     const progressEl = document.getElementById('loadingProgress');
     const mainTextEl = document.getElementById('loadingText');
@@ -51,10 +110,13 @@ window.onload = async function () {
 
     try {
         updateLoading(15, 'เชื่อมต่อเซิร์ฟเวอร์...', 'กำลังเตรียมข้อมูลระบบ');
+
+        // 🌟 โหลด แผนที่, รายชื่อตำแหน่ง และ LIFF ไปพร้อมๆ กัน (Parallel) เพื่อความรวดเร็ว
         const mapPromise = fetchMapSettings().catch(e => console.warn(e));
+        const rolePromise = fetchRolesSettings().catch(e => console.warn(e));
         const liffPromise = initializeLiffCore();
 
-        await Promise.all([mapPromise, liffPromise]);
+        await Promise.all([mapPromise, rolePromise, liffPromise]);
 
     } catch (error) {
         console.error("Initialization Error:", error);
@@ -66,8 +128,27 @@ function startClock() {
     setInterval(() => {
         const now = new Date();
         document.getElementById('headerDate').textContent = now.toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "numeric" });
-        document.getElementById('headerTime').textContent = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+        document.getElementById('headerTime').textContent = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Bangkok" });
     }, 1000);
+}
+
+// 🌟 ฟังก์ชันดึงรายชื่อตำแหน่งจาก Sheet มาใส่ใน Dropdown ลงทะเบียน
+async function fetchRolesSettings() {
+    const res = await fetch(CONFIG.WEB_APP_API, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getRoles' })
+    });
+    const roles = await res.json();
+    const deptSelect = document.getElementById('reg-dept');
+    if (!deptSelect) return;
+
+    deptSelect.innerHTML = '<option value="" disabled selected>-- เลือกตำแหน่ง / ชั้นปี --</option>';
+    roles.forEach(role => {
+        const option = document.createElement('option');
+        option.value = role.name;
+        option.textContent = role.name;
+        deptSelect.appendChild(option);
+    });
 }
 
 async function fetchMapSettings() {
@@ -92,7 +173,8 @@ async function initializeLiffCore() {
     if (liff.isLoggedIn()) {
         const profile = await liff.getProfile();
         currentUserId = profile.userId;
-        document.getElementById('reg-lineId').value = currentUserId;
+        const lineIdInput = document.getElementById('reg-lineId');
+        if (lineIdInput) lineIdInput.value = currentUserId;
 
         updateLoading(65, 'ตรวจสอบประวัติ...', 'ค้นหาข้อมูลในฐานข้อมูล');
         await checkUserStatus(currentUserId);
@@ -150,7 +232,6 @@ function startCamera(mode) {
     const videoEl = document.getElementById(`${mode}-camera-preview`);
     if (stream) { stream.getTracks().forEach(track => track.stop()); }
 
-    // ค่าเริ่มต้น: กล้องหน้าให้กลับซ้ายขวา (Mirror) กล้องหลังไม่กลับ
     isMirrored = (currentFacingMode === "user");
     applyMirrorEffect(mode);
 
@@ -165,7 +246,7 @@ function startCamera(mode) {
         .catch(function (err) {
             console.error("Camera Error:", err);
             videoEl.outerHTML = `<div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-200 text-slate-500 p-4 text-center border-2 border-dashed border-slate-300"><i class="fas fa-camera-slash text-4xl mb-2 text-rose-400"></i><p class="text-sm font-bold text-slate-700">ไม่สามารถเปิดกล้องได้</p><p class="text-xs mt-1">กรุณาตรวจสอบการอนุญาต<br>การเข้าถึงกล้องในการตั้งค่าแอป LINE</p></div>`;
-            Swal.fire({ icon: "warning", title: "เข้าถึงกล้องไม่ได้", text: "กรุณาอนุญาตให้ LINE เข้าถึงกล้องเพื่อถ่ายรูป", confirmButtonColor: "#0f766e" });
+            Swal.fire({ icon: "warning", title: "เข้าถึงกล้องไม่ได้", text: "กรุณาอนุญาตให้ LINE เข้าถึงกล้องเพื่อถ่ายรูป", confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
         });
 }
 
@@ -174,13 +255,11 @@ function switchCamera(mode) {
     startCamera(mode);
 }
 
-// 🌟 ฟังก์ชันกดสลับ Mirror
 function toggleMirror(mode) {
     isMirrored = !isMirrored;
     applyMirrorEffect(mode);
 }
 
-// 🌟 ฟังก์ชันอัปเดต CSS ทันทีเมื่อ Mirror เปลี่ยน
 function applyMirrorEffect(mode) {
     const videoEl = document.getElementById(`${mode}-camera-preview`);
     const previewEl = document.getElementById(`${mode}-preview`);
@@ -204,14 +283,12 @@ function captureOptimizedFrame(mode) {
 
     const ctx = canvas.getContext("2d");
 
-    // 🌟 พลิกภาพก่อนวาดลง Canvas ถ้าผู้ใช้เปิดโหมด Mirror ไว้
     if (isMirrored) {
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
     }
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
     return canvas.toDataURL("image/jpeg", 0.7);
 }
 
@@ -273,7 +350,7 @@ function submitRegistration() {
 
     fetch(CONFIG.WEB_APP_API, { method: "POST", body: JSON.stringify(obj) })
         .then(() => {
-            Swal.fire({ title: "สำเร็จ!", text: "ลงทะเบียนเรียบร้อยแล้ว", icon: "success", confirmButtonColor: "#0f766e" })
+            Swal.fire({ title: "สำเร็จ!", text: "ลงทะเบียนเรียบร้อยแล้ว", icon: "success", confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" })
                 .then(() => {
                     currentUserData = ["", currentUserId, name, empId, dept, capturedRegImage];
                     switchView('checkinView');
@@ -334,7 +411,7 @@ async function executeCheckin(lat, lng) {
     }
 
     if (!inRange) {
-        return Swal.fire({ icon: "error", title: "อยู่นอกพื้นที่!", text: `คุณอยู่ห่างจากจุดลงเวลาที่ใกล้ที่สุด ${nearestDistance.toFixed(0)} เมตร`, confirmButtonColor: "#0f766e" });
+        return Swal.fire({ icon: "error", title: "อยู่นอกพื้นที่!", text: `คุณอยู่ห่างจากจุดลงเวลาที่ใกล้ที่สุด ${nearestDistance.toFixed(0)} เมตร`, confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
     }
 
     try {
@@ -346,7 +423,7 @@ async function executeCheckin(lat, lng) {
         const payload = {
             base64: capturedImageBase64,
             name: currentUserData[2],
-            role: currentUserData[3],
+            role: currentUserData[4], // ใช้ index 4 สำหรับชั้นปี/ตำแหน่ง (index 3 คือรหัสนิสิต)
             job: jobType,
             note: note,
             today: `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`,
@@ -433,9 +510,10 @@ function initOrUpdateMap(userLat, userLng) {
         }).addTo(leafletMap);
 
         TARGET_LOCATIONS.forEach(loc => {
+            const themeColor = localStorage.getItem('appThemeColor') || '#0f766e';
             L.circle([loc.lat, loc.lng], {
-                color: '#0f766e',
-                fillColor: '#14b8a6',
+                color: themeColor,
+                fillColor: themeColor,
                 fillOpacity: 0.2,
                 radius: loc.range
             }).addTo(leafletMap);
@@ -466,7 +544,7 @@ function closeMapModal() {
 // 💬 6. LINE FLEX MESSAGE
 // ==========================================
 async function sendFlexMessage(data) {
-    const jobColor = data.job === 'เข้าเวร' ? '#0f766e' : data.job === 'ออกเวร' ? '#e11d48' : '#d97706';
+    const jobColor = data.job === 'เข้าเวร' ? (localStorage.getItem('appThemeColor') || '#0f766e') : data.job === 'ออกเวร' ? '#e11d48' : '#d97706';
 
     const now = new Date();
     const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
