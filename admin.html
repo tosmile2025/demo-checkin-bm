@@ -119,21 +119,14 @@
                 <div class="space-y-3 mb-5">
                     <div>
                         <input id="filterSearch" type="text"
-                            class="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-medical-600 focus:ring-1 focus:ring-medical-600 outline-none transition"
+                            class="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-medical-600 focus:ring-1 focus:ring-medical-600 outline-none transition shadow-sm"
                             placeholder="ค้นหาชื่อ หรือ รหัสนิสิต..." />
                     </div>
                     <div>
+                        <!-- 🌟 เปลี่ยน Dropdown ให้เป็นกล่องว่างๆ เพื่อรอรับข้อมูล -->
                         <select id="filterDept"
-                            class="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-medical-600 focus:ring-1 focus:ring-medical-600 outline-none transition cursor-pointer font-medium text-slate-700">
+                            class="w-full rounded-xl border border-slate-300 p-3 text-sm focus:border-medical-600 focus:ring-1 focus:ring-medical-600 outline-none transition cursor-pointer font-medium text-slate-700 shadow-sm">
                             <option value="">ทุกตำแหน่ง / ชั้นปี</option>
-                            <option value="นพท. ปี 4">นิสิตแพทย์ ชั้นปีที่ 4</option>
-                            <option value="นพท. ปี 5">นิสิตแพทย์ ชั้นปีที่ 5</option>
-                            <option value="นพท. ปี 6">นิสิตแพทย์ ชั้นปีที่ 6</option>
-                            <option value="แพทย์เพิ่มพูนทักษะ">แพทย์เพิ่มพูนทักษะ (Intern)</option>
-                            <option value="แพทย์ใช้ทุน">แพทย์ใช้ทุน</option>
-                            <option value="แพทย์พี่เลี้ยง">แพทย์พี่เลี้ยง</option>
-                            <option value="แพทย์ประจำบ้าน">แพทย์ประจำบ้าน (Resident)</option>
-                            <option value="อาจารย์แพทย์">อาจารย์แพทย์ (Staff)</option>
                         </select>
                     </div>
                 </div>
@@ -141,19 +134,10 @@
                 <div class="mb-5 bg-slate-50 p-4 rounded-xl border border-slate-100">
                     <label
                         class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">สถานะ</label>
-                    <div class="flex flex-col space-y-2 text-sm">
-                        <label class="inline-flex items-center cursor-pointer"><input id="filterWard" type="checkbox"
-                                value="ราว ward" checked
-                                class="rounded text-amber-500 focus:ring-amber-500 w-4 h-4 cursor-pointer" /> <span
-                                class="ml-2 font-medium text-slate-700">ราว ward</span></label>
-                        <label class="inline-flex items-center cursor-pointer"><input id="filterIn" type="checkbox"
-                                value="เข้าเวร" checked
-                                class="rounded text-medical-600 focus:ring-medical-600 w-4 h-4 cursor-pointer" /> <span
-                                class="ml-2 font-medium text-slate-700">เข้าเวร</span></label>
-                        <label class="inline-flex items-center cursor-pointer"><input id="filterOut" type="checkbox"
-                                value="ออกเวร" checked
-                                class="rounded text-rose-500 focus:ring-rose-500 w-4 h-4 cursor-pointer" /> <span
-                                class="ml-2 font-medium text-slate-700">ออกเวร</span></label>
+                    <!-- 🌟 เปลี่ยน Checkbox เป็น Container ว่างๆ เพื่อรับหมวดตามตำแหน่ง -->
+                    <div id="filterJobContainer" class="flex flex-col space-y-2 text-sm">
+                        <div class="text-xs text-slate-400"><i class="fas fa-spinner fa-spin mr-1"></i> กำลังโหลด...
+                        </div>
                     </div>
                 </div>
 
