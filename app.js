@@ -12,6 +12,7 @@ let TARGET_LOCATIONS = [{
 
 let currentUserData = null;
 let currentUserId = null;
+let timeSettingsData = []; // 🌟 ตัวแปรใหม่สำหรับเก็บหมวดเวลา
 
 let stream;
 let currentFacingMode = "user";
@@ -111,12 +112,13 @@ window.onload = async function () {
     try {
         updateLoading(15, 'เชื่อมต่อเซิร์ฟเวอร์...', 'กำลังเตรียมข้อมูลระบบ');
 
-        // 🌟 โหลด แผนที่, รายชื่อตำแหน่ง และ LIFF ไปพร้อมๆ กัน (Parallel) เพื่อความรวดเร็ว
+        // 🌟 เพิ่ม fetchTimeSettings() เข้าไปโหลดขนานกับตัวอื่นๆ
         const mapPromise = fetchMapSettings().catch(e => console.warn(e));
         const rolePromise = fetchRolesSettings().catch(e => console.warn(e));
+        const timePromise = fetchTimeSettings().catch(e => console.warn(e));
         const liffPromise = initializeLiffCore();
 
-        await Promise.all([mapPromise, rolePromise, liffPromise]);
+        await Promise.all([mapPromise, rolePromise, timePromise, liffPromise]);
 
     } catch (error) {
         console.error("Initialization Error:", error);
@@ -164,6 +166,15 @@ async function fetchMapSettings() {
     } else if (data && data.lat) {
         TARGET_LOCATIONS = [{ id: 'old', name: 'จุดหลัก', lat: parseFloat(data.lat), lng: parseFloat(data.lng), range: parseInt(data.range) }];
     }
+}
+
+// 🌟 ฟังก์ชันใหม่: ดึงหมวดและเวลาการทำงาน
+async function fetchTimeSettings() {
+    const res = await fetch(CONFIG.WEB_APP_API, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'getTimeSettings' })
+    });
+    timeSettingsData = await res.json();
 }
 
 async function initializeLiffCore() {
@@ -373,7 +384,47 @@ function setupCheckinView() {
     startCamera('chk');
     startBackgroundGPS();
 
+    // 🌟 สร้างตัวเลือกการลงเวลาจากตาราง
+    populateJobDropdown();
+
     document.getElementById('btn-checkin').onclick = processOneClickCheckin;
+}
+
+// 🌟 ฟังก์ชันใหม่: สร้าง Dropdown หมวดให้ตรงกับตำแหน่ง (Role)
+function populateJobDropdown() {
+    const jobSelect = document.getElementById('chk-job');
+    if (!jobSelect) return;
+
+    jobSelect.innerHTML = '<option value="" disabled selected>-- เลือกประเภทการลงเวลา --</option>';
+
+    const userRole = currentUserData[4] || ""; // ตำแหน่งของ User ปัจจุบัน (เช่น นพท. ปี 4)
+
+    // กรองเอาหมวดที่ตำแหน่งตรงกัน หรือตำแหน่งเป็น ? (ให้ทุกคน)
+    let availableJobs = timeSettingsData.filter(t =>
+        t.role === userRole || t.role === '?' || !t.role.trim()
+    );
+
+    // ถ้าไม่มีที่ตรงเลย ให้โชว์ทั้งหมดไปก่อน (กันระบบพัง)
+    if (availableJobs.length === 0) {
+        availableJobs = timeSettingsData;
+    }
+
+    // สร้าง option โดยไม่ให้ชื่อหมวดซ้ำกัน
+    const uniqueJobs = new Set();
+    availableJobs.forEach(item => {
+        if (item.job && !uniqueJobs.has(item.job)) {
+            uniqueJobs.add(item.job);
+            const option = document.createElement('option');
+            option.value = item.job;
+            option.textContent = item.job;
+            jobSelect.appendChild(option);
+        }
+    });
+
+    // ถ้ามีตัวเลือกมากกว่า 1 (คือมีข้อมูลมาแล้ว) ให้เลือกอันแรกตั้งไว้เลย
+    if (jobSelect.options.length > 1) {
+        jobSelect.selectedIndex = 1;
+    }
 }
 
 function startBackgroundGPS() {
@@ -415,15 +466,21 @@ async function executeCheckin(lat, lng) {
     }
 
     try {
+        // 🌟 เปลี่ยนมารับค่าจาก Dropdown ใหม่ที่เราสร้าง
+        const jobSelect = document.getElementById('chk-job');
+        if (!jobSelect || !jobSelect.value) {
+            return Swal.fire("แจ้งเตือน", "กรุณาเลือกประเภทการลงเวลาก่อนครับ", "warning");
+        }
+
+        const jobType = jobSelect.value;
         const capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
-        const jobType = document.querySelector('input[name="job-type"]:checked').value;
         const note = document.getElementById('chk-note').value;
 
         const now = new Date();
         const payload = {
             base64: capturedImageBase64,
             name: currentUserData[2],
-            role: currentUserData[4], // ใช้ index 4 สำหรับชั้นปี/ตำแหน่ง (index 3 คือรหัสนิสิต)
+            role: currentUserData[4], // ใช้ index 4 (ตำแหน่ง/ชั้นปี)
             job: jobType,
             note: note,
             today: `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`,
