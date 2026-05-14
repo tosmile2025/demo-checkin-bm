@@ -134,23 +134,33 @@ function startClock() {
     }, 1000);
 }
 
-// 🌟 ฟังก์ชันดึงรายชื่อตำแหน่งจาก Sheet มาใส่ใน Dropdown ลงทะเบียน
+// 🌟 ฟังก์ชันดึงรายชื่อตำแหน่งปรับปรุงใหม่ (มีระบบแจ้งเตือนถ้าพัง)
 async function fetchRolesSettings() {
-    const res = await fetch(CONFIG.WEB_APP_API, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getRoles' })
-    });
-    const roles = await res.json();
     const deptSelect = document.getElementById('reg-dept');
     if (!deptSelect) return;
 
-    deptSelect.innerHTML = '<option value="" disabled selected>-- เลือกตำแหน่ง / ชั้นปี --</option>';
-    roles.forEach(role => {
-        const option = document.createElement('option');
-        option.value = role.name;
-        option.textContent = role.name;
-        deptSelect.appendChild(option);
-    });
+    try {
+        const res = await fetch(CONFIG.WEB_APP_API, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'getRoles' })
+        });
+
+        const roles = await res.json();
+
+        deptSelect.innerHTML = '<option value="" disabled selected>-- เลือกตำแหน่ง / ชั้นปี --</option>';
+
+        roles.forEach(role => {
+            const option = document.createElement('option');
+            option.value = role.name;
+            option.textContent = role.name;
+            deptSelect.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error("Error loading roles:", error);
+        // ถ้าโหลดไม่สำเร็จ ให้แสดงข้อความใน Dropdown เพื่อให้รู้ว่าเกิด Error
+        deptSelect.innerHTML = '<option value="" disabled selected>-- ❌ โหลดข้อมูลตำแหน่งล้มเหลว --</option>';
+    }
 }
 
 async function fetchMapSettings() {
