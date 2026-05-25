@@ -12,12 +12,12 @@ let TARGET_LOCATIONS = [{
 
 let currentUserData = null;
 let currentUserId = null;
-let timeSettingsData = []; // 🌟 ตัวแปรใหม่สำหรับเก็บหมวดเวลา
+let timeSettingsData = [];
 
 let stream;
 let currentFacingMode = "user";
 let activeCameraMode = null;
-let isMirrored = true; // 🌟 ตัวแปรเช็คสถานะการ Mirror (ค่าเริ่มต้นเปิดใช้)
+let isMirrored = true;
 
 let watchId = null;
 let cachedLocation = null;
@@ -112,7 +112,6 @@ window.onload = async function () {
     try {
         updateLoading(15, 'เชื่อมต่อเซิร์ฟเวอร์...', 'กำลังเตรียมข้อมูลระบบ');
 
-        // 🌟 เพิ่ม fetchTimeSettings() เข้าไปโหลดขนานกับตัวอื่นๆ
         const mapPromise = fetchMapSettings().catch(e => console.warn(e));
         const rolePromise = fetchRolesSettings().catch(e => console.warn(e));
         const timePromise = fetchTimeSettings().catch(e => console.warn(e));
@@ -134,7 +133,6 @@ function startClock() {
     }, 1000);
 }
 
-// 🌟 ฟังก์ชันดึงรายชื่อตำแหน่งปรับปรุงใหม่ (มีระบบแจ้งเตือนถ้าพัง)
 async function fetchRolesSettings() {
     const deptSelect = document.getElementById('reg-dept');
     if (!deptSelect) return;
@@ -158,7 +156,6 @@ async function fetchRolesSettings() {
 
     } catch (error) {
         console.error("Error loading roles:", error);
-        // ถ้าโหลดไม่สำเร็จ ให้แสดงข้อความใน Dropdown เพื่อให้รู้ว่าเกิด Error
         deptSelect.innerHTML = '<option value="" disabled selected>-- ❌ โหลดข้อมูลตำแหน่งล้มเหลว --</option>';
     }
 }
@@ -178,7 +175,6 @@ async function fetchMapSettings() {
     }
 }
 
-// 🌟 ฟังก์ชันใหม่: ดึงหมวดและเวลาการทำงาน
 async function fetchTimeSettings() {
     const res = await fetch(CONFIG.WEB_APP_API, {
         method: 'POST',
@@ -393,33 +389,27 @@ function setupCheckinView() {
 
     startCamera('chk');
     startBackgroundGPS();
-
-    // 🌟 สร้างตัวเลือกการลงเวลาจากตาราง
     populateJobDropdown();
 
     document.getElementById('btn-checkin').onclick = processOneClickCheckin;
 }
 
-// 🌟 ฟังก์ชันใหม่: สร้าง Dropdown หมวดให้ตรงกับตำแหน่ง (Role)
 function populateJobDropdown() {
     const jobSelect = document.getElementById('chk-job');
     if (!jobSelect) return;
 
     jobSelect.innerHTML = '<option value="" disabled selected>-- เลือกประเภทการลงเวลา --</option>';
 
-    const userRole = currentUserData[4] || ""; // ตำแหน่งของ User ปัจจุบัน (เช่น นพท. ปี 4)
+    const userRole = currentUserData[4] || "";
 
-    // กรองเอาหมวดที่ตำแหน่งตรงกัน หรือตำแหน่งเป็น ? (ให้ทุกคน)
     let availableJobs = timeSettingsData.filter(t =>
         t.role === userRole || t.role === '?' || !t.role.trim()
     );
 
-    // ถ้าไม่มีที่ตรงเลย ให้โชว์ทั้งหมดไปก่อน (กันระบบพัง)
     if (availableJobs.length === 0) {
         availableJobs = timeSettingsData;
     }
 
-    // สร้าง option โดยไม่ให้ชื่อหมวดซ้ำกัน
     const uniqueJobs = new Set();
     availableJobs.forEach(item => {
         if (item.job && !uniqueJobs.has(item.job)) {
@@ -431,7 +421,6 @@ function populateJobDropdown() {
         }
     });
 
-    // ถ้ามีตัวเลือกมากกว่า 1 (คือมีข้อมูลมาแล้ว) ให้เลือกอันแรกตั้งไว้เลย
     if (jobSelect.options.length > 1) {
         jobSelect.selectedIndex = 1;
     }
@@ -481,10 +470,9 @@ async function executeCheckin(lat, lng) {
             return Swal.fire("แจ้งเตือน", "กรุณาเลือกประเภทการลงเวลาก่อนครับ", "warning");
         }
 
-        // 🌟 แก้ไข: อัปเดตข้อความเพื่อไม่ให้คิดว่าค้างที่ GPS ในกรณีที่เน็ตช้า
         Swal.update({
             title: 'กำลังบันทึกข้อมูลปฏิบัติงาน...',
-            html: 'กำลังอัปโหลดรูปภาพและพิกัด กรุณารอสักครู่'
+            html: 'กำลังอัปโหลดรูปภาพและพิกัดไปยังระบบฐานข้อมูล'
         });
 
         const jobType = jobSelect.value;
@@ -495,7 +483,7 @@ async function executeCheckin(lat, lng) {
         const payload = {
             base64: capturedImageBase64,
             name: currentUserData[2],
-            role: currentUserData[4], // ใช้ index 4 (ตำแหน่ง/ชั้นปี)
+            role: currentUserData[4],
             job: jobType,
             note: note,
             today: `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`,
@@ -510,7 +498,7 @@ async function executeCheckin(lat, lng) {
             .then(() => {
                 Swal.fire("สำเร็จ!", "บันทึกเวลาเรียบร้อยแล้ว", "success").then(() => sendFlexMessage(payload));
             })
-            .catch(() => Swal.fire("ข้อผิดพลาด", "ไม่สามารถบันทึกข้อมูลได้", "error"));
+            .catch(() => Swal.fire("ข้อผิดพลาด", "ไม่สามารถบันทึกข้อมูลได้ (ปัญหาเครือข่าย)", "error"));
     } catch (e) {
         Swal.fire("ข้อผิดพลาด", "กรุณาถ่ายภาพก่อนลงเวลา (ไม่พบกล้อง)", "warning");
     }
@@ -524,23 +512,25 @@ function processOneClickCheckin() {
     } else {
         if (!navigator.geolocation) return Swal.fire("ไม่รองรับ", "อุปกรณ์ของคุณไม่รองรับ GPS", "error");
 
-        // 🌟 แก้ไข: ระบบจับเวลา 8 วินาที ดักจับกรณีเครื่องที่เปิด GPS ไม่สำเร็จแล้วค้าง
         let isGpsResolved = false;
+
+        // 🌟 ขยายเวลาดักค้างเป็น 15 วินาที เพื่อให้มือถือรุ่นที่ GPS ทำงานช้า มีเวลาจับคลื่นได้สำเร็จ
         let gpsSafetyTimer = setTimeout(() => {
             if (!isGpsResolved) {
                 isGpsResolved = true;
                 Swal.fire({
                     icon: "warning",
                     title: "สัญญาณ GPS ขัดข้อง",
-                    text: "รบกวนตรวจสอบการเปิดพิกัด (Location) บนมือถือ หรือลองรีเฟรชหน้าใหม่อีกครั้งครับ",
+                    text: "ไม่สามารถดึงพิกัดได้ รบกวนตรวจสอบการเปิดสิทธิ์ Location ให้แอป LINE หรือลองปิด-เปิดสัญญาณเน็ตครับ",
                     confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e"
                 });
             }
-        }, 8000);
+        }, 15000);
 
+        // 🌟 ปรับลด timeout ของ GPS ลงเหลือ 14 วิ เพื่อให้มันยอมแพ้และส่ง Error ก่อนที่ Safety Timer จะเด้ง
         navigator.geolocation.getCurrentPosition(
             (pos) => {
-                if (isGpsResolved) return; // ป้องกันการทำงานซ้อนถ้าเกิน 8 วิไปแล้ว
+                if (isGpsResolved) return;
                 isGpsResolved = true;
                 clearTimeout(gpsSafetyTimer);
                 executeCheckin(pos.coords.latitude, pos.coords.longitude);
@@ -549,9 +539,9 @@ function processOneClickCheckin() {
                 if (isGpsResolved) return;
                 isGpsResolved = true;
                 clearTimeout(gpsSafetyTimer);
-                Swal.fire("เกิดข้อผิดพลาด", "กรุณาเปิด GPS (Location) เพื่อลงเวลา", "error");
+                Swal.fire("เกิดข้อผิดพลาด", "กรุณาเปิดสิทธิ์ GPS (Location) ให้แอป LINE เพื่อลงเวลา", "error");
             },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            { enableHighAccuracy: true, timeout: 14000 }
         );
     }
 }
@@ -569,7 +559,6 @@ function openMapModal() {
 
     Swal.fire({ title: 'กำลังค้นหาพิกัด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-    // 🌟 แก้ไข: เพิ่มระบบดักจับเวลา 8 วินาที สำหรับหน้าดูแผนที่ด้วยเช่นกัน
     let isMapGpsResolved = false;
     let mapGpsSafetyTimer = setTimeout(() => {
         if (!isMapGpsResolved) {
@@ -577,11 +566,11 @@ function openMapModal() {
             Swal.fire({
                 icon: "warning",
                 title: "สัญญาณ GPS ขัดข้อง",
-                text: "รบกวนตรวจสอบการเปิดพิกัด (Location) บนมือถือ หรือปิด-เปิดเน็ตใหม่ครับ",
+                text: "รบกวนตรวจสอบการเปิดสิทธิ์ Location ให้แอป LINE หรือปิด-เปิดเน็ตใหม่ครับ",
                 confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e"
             });
         }
-    }, 8000);
+    }, 15000); // ขยายเวลาเป็น 15 วินาทีเช่นกัน
 
     navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -616,7 +605,7 @@ function openMapModal() {
             isMapGpsResolved = true;
             clearTimeout(mapGpsSafetyTimer);
             Swal.fire("ข้อผิดพลาด", "กรุณาเปิด GPS และอนุญาตการเข้าถึง", "error");
-        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        }, { enableHighAccuracy: true, timeout: 14000 }
     );
 }
 
