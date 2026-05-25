@@ -26,7 +26,7 @@ let leafletMap = null;
 let userMarker = null;
 
 // ==========================================
-// 🎨 0. DYNAMIC THEME SYSTEM (โหลดสี 0 วินาที)
+// 🎨 0. DYNAMIC THEME SYSTEM 
 // ==========================================
 loadAndApplyTheme();
 
@@ -142,9 +142,7 @@ async function fetchRolesSettings() {
             method: 'POST',
             body: JSON.stringify({ action: 'getRoles' })
         });
-
         const roles = await res.json();
-
         deptSelect.innerHTML = '<option value="" disabled selected>-- เลือกตำแหน่ง / ชั้นปี --</option>';
 
         roles.forEach(role => {
@@ -153,9 +151,7 @@ async function fetchRolesSettings() {
             option.textContent = role.name;
             deptSelect.appendChild(option);
         });
-
     } catch (error) {
-        console.error("Error loading roles:", error);
         deptSelect.innerHTML = '<option value="" disabled selected>-- ❌ โหลดข้อมูลตำแหน่งล้มเหลว --</option>';
     }
 }
@@ -206,7 +202,7 @@ async function checkUserStatus(userId) {
         body: JSON.stringify({ action: "fetchData", source: "member", userId: userId }),
     });
 
-    if (!response.ok) throw new Error("ไม่สามารถติดต่อฐานข้อมูลได้ (API Error)");
+    if (!response.ok) throw new Error("ไม่สามารถติดต่อฐานข้อมูลได้");
 
     const data = await response.json();
     const userRows = data.filter((row) => row[1] === userId);
@@ -218,12 +214,10 @@ async function checkUserStatus(userId) {
         currentUserData = userRows[0];
 
         updateLoading(100, 'เสร็จสิ้น!', 'เข้าสู่ระบบลงเวลา');
-
         switchView('checkinView');
         setTimeout(() => { setupCheckinView(); }, 600);
     } else {
         updateLoading(100, 'เสร็จสิ้น!', 'เข้าสู่หน้าลงทะเบียน');
-
         switchView('registerView');
         setTimeout(() => { setupRegisterView(); }, 600);
     }
@@ -242,7 +236,7 @@ function switchView(viewId) {
 }
 
 // ==========================================
-// 📸 2. CAMERA & IMAGE OPTIMIZATION (ระบบกล้อง & Mirror)
+// 📸 2. CAMERA 
 // ==========================================
 function startCamera(mode) {
     activeCameraMode = mode;
@@ -261,8 +255,7 @@ function startCamera(mode) {
             if (previewEl) previewEl.classList.add('hidden');
         })
         .catch(function (err) {
-            console.error("Camera Error:", err);
-            videoEl.outerHTML = `<div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-200 text-slate-500 p-4 text-center border-2 border-dashed border-slate-300"><i class="fas fa-camera-slash text-4xl mb-2 text-rose-400"></i><p class="text-sm font-bold text-slate-700">ไม่สามารถเปิดกล้องได้</p><p class="text-xs mt-1">กรุณาตรวจสอบการอนุญาต<br>การเข้าถึงกล้องในการตั้งค่าแอป LINE</p></div>`;
+            videoEl.outerHTML = `<div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-200 text-slate-500 p-4 text-center border-2 border-dashed border-slate-300"><i class="fas fa-camera-slash text-4xl mb-2 text-rose-400"></i><p class="text-sm font-bold text-slate-700">ไม่สามารถเปิดกล้องได้</p></div>`;
             Swal.fire({ icon: "warning", title: "เข้าถึงกล้องไม่ได้", text: "กรุณาอนุญาตให้ LINE เข้าถึงกล้องเพื่อถ่ายรูป", confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
         });
 }
@@ -281,30 +274,24 @@ function applyMirrorEffect(mode) {
     const videoEl = document.getElementById(`${mode}-camera-preview`);
     const previewEl = document.getElementById(`${mode}-preview`);
     const transformStyle = isMirrored ? "scaleX(-1)" : "scaleX(1)";
-
     if (videoEl) videoEl.style.transform = transformStyle;
     if (previewEl) previewEl.style.transform = transformStyle;
 }
 
 function captureOptimizedFrame(mode) {
     const video = document.getElementById(`${mode}-camera-preview`);
-    if (!video || !video.videoWidth) {
-        throw new Error("ไม่มีภาพจากกล้อง");
-    }
-    const canvas = document.createElement("canvas");
+    if (!video || !video.videoWidth) throw new Error("ไม่มีภาพจากกล้อง");
 
-    const MAX_WIDTH = 600;
-    const scale = MAX_WIDTH / video.videoWidth;
-    canvas.width = MAX_WIDTH;
+    const canvas = document.createElement("canvas");
+    const scale = 600 / video.videoWidth;
+    canvas.width = 600;
     canvas.height = video.videoHeight * scale;
 
     const ctx = canvas.getContext("2d");
-
     if (isMirrored) {
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
     }
-
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL("image/jpeg", 0.7);
 }
@@ -399,16 +386,13 @@ function populateJobDropdown() {
     if (!jobSelect) return;
 
     jobSelect.innerHTML = '<option value="" disabled selected>-- เลือกประเภทการลงเวลา --</option>';
-
     const userRole = currentUserData[4] || "";
 
     let availableJobs = timeSettingsData.filter(t =>
         t.role === userRole || t.role === '?' || !t.role.trim()
     );
 
-    if (availableJobs.length === 0) {
-        availableJobs = timeSettingsData;
-    }
+    if (availableJobs.length === 0) availableJobs = timeSettingsData;
 
     const uniqueJobs = new Set();
     availableJobs.forEach(item => {
@@ -426,6 +410,7 @@ function populateJobDropdown() {
     }
 }
 
+// 🌟 นำโค้ด Background GPS ดั้งเดิมของคุณกลับมา 100%
 function startBackgroundGPS() {
     if (navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(
@@ -452,7 +437,6 @@ async function executeCheckin(lat, lng) {
     for (const loc of TARGET_LOCATIONS) {
         const distance = calculateDistance(lat, lng, loc.lat, loc.lng);
         if (distance < nearestDistance) nearestDistance = distance;
-
         if (distance <= loc.range) {
             inRange = true;
             targetLocationName = loc.name;
@@ -470,9 +454,10 @@ async function executeCheckin(lat, lng) {
             return Swal.fire("แจ้งเตือน", "กรุณาเลือกประเภทการลงเวลาก่อนครับ", "warning");
         }
 
+        // 🌟 แก้ปัญหาคนบ่นระบบค้าง: สั่งเปลี่ยนข้อความทันทีที่กำลังอัปโหลดข้อมูล (พ้นระยะหา GPS มาแล้ว)
         Swal.update({
             title: 'กำลังบันทึกข้อมูลปฏิบัติงาน...',
-            html: 'กำลังอัปโหลดรูปภาพและพิกัดไปยังระบบฐานข้อมูล'
+            html: 'กำลังส่งข้อมูลเข้าฐานข้อมูล กรุณารอสักครู่'
         });
 
         const jobType = jobSelect.value;
@@ -504,6 +489,7 @@ async function executeCheckin(lat, lng) {
     }
 }
 
+// 🌟 นำโค้ด One Click Check-in ดั้งเดิมของคุณกลับมา 100% (ไม่มีตัวตั้งเวลาตัดจบแล้ว)
 function processOneClickCheckin() {
     Swal.fire({ title: 'กำลังตรวจสอบพิกัด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
@@ -512,36 +498,10 @@ function processOneClickCheckin() {
     } else {
         if (!navigator.geolocation) return Swal.fire("ไม่รองรับ", "อุปกรณ์ของคุณไม่รองรับ GPS", "error");
 
-        let isGpsResolved = false;
-
-        // 🌟 ขยายเวลาดักค้างเป็น 15 วินาที เพื่อให้มือถือรุ่นที่ GPS ทำงานช้า มีเวลาจับคลื่นได้สำเร็จ
-        let gpsSafetyTimer = setTimeout(() => {
-            if (!isGpsResolved) {
-                isGpsResolved = true;
-                Swal.fire({
-                    icon: "warning",
-                    title: "สัญญาณ GPS ขัดข้อง",
-                    text: "ไม่สามารถดึงพิกัดได้ รบกวนตรวจสอบการเปิดสิทธิ์ Location ให้แอป LINE หรือลองปิด-เปิดสัญญาณเน็ตครับ",
-                    confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e"
-                });
-            }
-        }, 15000);
-
-        // 🌟 ปรับลด timeout ของ GPS ลงเหลือ 14 วิ เพื่อให้มันยอมแพ้และส่ง Error ก่อนที่ Safety Timer จะเด้ง
         navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                if (isGpsResolved) return;
-                isGpsResolved = true;
-                clearTimeout(gpsSafetyTimer);
-                executeCheckin(pos.coords.latitude, pos.coords.longitude);
-            },
-            (err) => {
-                if (isGpsResolved) return;
-                isGpsResolved = true;
-                clearTimeout(gpsSafetyTimer);
-                Swal.fire("เกิดข้อผิดพลาด", "กรุณาเปิดสิทธิ์ GPS (Location) ให้แอป LINE เพื่อลงเวลา", "error");
-            },
-            { enableHighAccuracy: true, timeout: 14000 }
+            (pos) => { executeCheckin(pos.coords.latitude, pos.coords.longitude); },
+            (err) => { Swal.fire("เกิดข้อผิดพลาด", "กรุณาเปิด GPS (Location) เพื่อลงเวลา", "error"); },
+            { enableHighAccuracy: true, timeout: 10000 }
         );
     }
 }
@@ -549,6 +509,7 @@ function processOneClickCheckin() {
 // ==========================================
 // 🗺️ 5. MAP MODAL (LEAFLET) 
 // ==========================================
+// 🌟 นำโค้ดแผนที่ดั้งเดิมของคุณกลับมา 100%
 function openMapModal() {
     document.getElementById('mapModal').classList.remove('hidden');
 
@@ -559,26 +520,9 @@ function openMapModal() {
 
     Swal.fire({ title: 'กำลังค้นหาพิกัด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-    let isMapGpsResolved = false;
-    let mapGpsSafetyTimer = setTimeout(() => {
-        if (!isMapGpsResolved) {
-            isMapGpsResolved = true;
-            Swal.fire({
-                icon: "warning",
-                title: "สัญญาณ GPS ขัดข้อง",
-                text: "รบกวนตรวจสอบการเปิดสิทธิ์ Location ให้แอป LINE หรือปิด-เปิดเน็ตใหม่ครับ",
-                confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e"
-            });
-        }
-    }, 15000); // ขยายเวลาเป็น 15 วินาทีเช่นกัน
-
     navigator.geolocation.getCurrentPosition(
         (pos) => {
-            if (isMapGpsResolved) return;
-            isMapGpsResolved = true;
-            clearTimeout(mapGpsSafetyTimer);
             Swal.close();
-
             const userLat = pos.coords.latitude;
             const userLng = pos.coords.longitude;
 
@@ -601,11 +545,8 @@ function openMapModal() {
             initOrUpdateMap(userLat, userLng);
         },
         (err) => {
-            if (isMapGpsResolved) return;
-            isMapGpsResolved = true;
-            clearTimeout(mapGpsSafetyTimer);
             Swal.fire("ข้อผิดพลาด", "กรุณาเปิด GPS และอนุญาตการเข้าถึง", "error");
-        }, { enableHighAccuracy: true, timeout: 14000 }
+        }, { enableHighAccuracy: true }
     );
 }
 
