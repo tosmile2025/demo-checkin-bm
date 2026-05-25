@@ -476,11 +476,16 @@ async function executeCheckin(lat, lng) {
     }
 
     try {
-        // 🌟 เปลี่ยนมารับค่าจาก Dropdown ใหม่ที่เราสร้าง
         const jobSelect = document.getElementById('chk-job');
         if (!jobSelect || !jobSelect.value) {
             return Swal.fire("แจ้งเตือน", "กรุณาเลือกประเภทการลงเวลาก่อนครับ", "warning");
         }
+
+        // 🌟 แก้ไข: อัปเดตข้อความเพื่อไม่ให้คิดว่าค้างที่ GPS ในกรณีที่เน็ตช้า
+        Swal.update({
+            title: 'กำลังบันทึกข้อมูลปฏิบัติงาน...',
+            html: 'กำลังอัปโหลดรูปภาพและพิกัด กรุณารอสักครู่'
+        });
 
         const jobType = jobSelect.value;
         const capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
@@ -518,10 +523,35 @@ function processOneClickCheckin() {
         executeCheckin(cachedLocation.latitude, cachedLocation.longitude);
     } else {
         if (!navigator.geolocation) return Swal.fire("ไม่รองรับ", "อุปกรณ์ของคุณไม่รองรับ GPS", "error");
+
+        // 🌟 แก้ไข: ระบบจับเวลา 8 วินาที ดักจับกรณีเครื่องที่เปิด GPS ไม่สำเร็จแล้วค้าง
+        let isGpsResolved = false;
+        let gpsSafetyTimer = setTimeout(() => {
+            if (!isGpsResolved) {
+                isGpsResolved = true;
+                Swal.fire({
+                    icon: "warning",
+                    title: "สัญญาณ GPS ขัดข้อง",
+                    text: "รบกวนตรวจสอบการเปิดพิกัด (Location) บนมือถือ หรือลองรีเฟรชหน้าใหม่อีกครั้งครับ",
+                    confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e"
+                });
+            }
+        }, 8000);
+
         navigator.geolocation.getCurrentPosition(
-            (pos) => { executeCheckin(pos.coords.latitude, pos.coords.longitude); },
-            (err) => { Swal.fire("เกิดข้อผิดพลาด", "กรุณาเปิด GPS (Location) เพื่อลงเวลา", "error"); },
-            { enableHighAccuracy: true, timeout: 10000 }
+            (pos) => {
+                if (isGpsResolved) return; // ป้องกันการทำงานซ้อนถ้าเกิน 8 วิไปแล้ว
+                isGpsResolved = true;
+                clearTimeout(gpsSafetyTimer);
+                executeCheckin(pos.coords.latitude, pos.coords.longitude);
+            },
+            (err) => {
+                if (isGpsResolved) return;
+                isGpsResolved = true;
+                clearTimeout(gpsSafetyTimer);
+                Swal.fire("เกิดข้อผิดพลาด", "กรุณาเปิด GPS (Location) เพื่อลงเวลา", "error");
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
     }
 }
@@ -539,9 +569,27 @@ function openMapModal() {
 
     Swal.fire({ title: 'กำลังค้นหาพิกัด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
+    // 🌟 แก้ไข: เพิ่มระบบดักจับเวลา 8 วินาที สำหรับหน้าดูแผนที่ด้วยเช่นกัน
+    let isMapGpsResolved = false;
+    let mapGpsSafetyTimer = setTimeout(() => {
+        if (!isMapGpsResolved) {
+            isMapGpsResolved = true;
+            Swal.fire({
+                icon: "warning",
+                title: "สัญญาณ GPS ขัดข้อง",
+                text: "รบกวนตรวจสอบการเปิดพิกัด (Location) บนมือถือ หรือปิด-เปิดเน็ตใหม่ครับ",
+                confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e"
+            });
+        }
+    }, 8000);
+
     navigator.geolocation.getCurrentPosition(
         (pos) => {
+            if (isMapGpsResolved) return;
+            isMapGpsResolved = true;
+            clearTimeout(mapGpsSafetyTimer);
             Swal.close();
+
             const userLat = pos.coords.latitude;
             const userLng = pos.coords.longitude;
 
@@ -564,8 +612,11 @@ function openMapModal() {
             initOrUpdateMap(userLat, userLng);
         },
         (err) => {
+            if (isMapGpsResolved) return;
+            isMapGpsResolved = true;
+            clearTimeout(mapGpsSafetyTimer);
             Swal.fire("ข้อผิดพลาด", "กรุณาเปิด GPS และอนุญาตการเข้าถึง", "error");
-        }, { enableHighAccuracy: true }
+        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
 }
 
