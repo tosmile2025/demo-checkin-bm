@@ -366,13 +366,12 @@ function submitRegistration() {
 }
 
 // ==========================================
-// 📍 4. FAST GPS & CHECK-IN LOGIC 
+// 📍 4. SMART GPS & CHECK-IN LOGIC 
 // ==========================================
 function setupCheckinView() {
     document.getElementById('chk-name').textContent = currentUserData[2];
     document.getElementById('chk-details').textContent = `รหัส: ${currentUserData[3]} | ${currentUserData[4]}`;
 
-    // 🌟 แก้ไข Bug 1: ใช้รูปสำรองกรณีโรงพยาบาลบล็อก via.placeholder.com
     const profileImageUrl = currentUserData[5];
     if (profileImageUrl && profileImageUrl.startsWith('http') && !profileImageUrl.includes('placeholder.com')) {
         document.getElementById('chk-profile-img').src = profileImageUrl;
@@ -416,7 +415,6 @@ function populateJobDropdown() {
     }
 }
 
-// 🌟 แก้ไข: ฟังก์ชันควบคุมสีปุ่มหมุด (Dynamic Indicator)
 function updateGpsIndicatorColor(state) {
     const btn = document.querySelector('[onclick="openMapModal()"]');
     if (!btn) return;
@@ -425,7 +423,6 @@ function updateGpsIndicatorColor(state) {
     const icon = btn.querySelector('.fa-map-marker-alt');
 
     if (dot && icon) {
-        // เขียว = ในพื้นที่, แดง = นอกพื้นที่, ส้ม = กำลังหาคลื่น
         const dotColor = state === 'in_range' ? 'bg-emerald-400' : state === 'out_range' ? 'bg-rose-500' : 'bg-amber-400';
         const iconColor = state === 'in_range' ? 'text-emerald-400' : state === 'out_range' ? 'text-rose-500' : 'text-amber-400';
 
@@ -434,15 +431,14 @@ function updateGpsIndicatorColor(state) {
     }
 }
 
+// 🌟 อัปเกรด 1: ตัวจับ GPS เบื้องหลัง ยอมใช้ค่าเก่าได้ 15 วินาที เพื่อให้เร็วขึ้น
 function startBackgroundGPS() {
-    updateGpsIndicatorColor('searching'); // เริ่มหาสัญญาณให้เป็นสีส้ม
+    updateGpsIndicatorColor('searching');
 
     if (navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(
             (pos) => {
                 cachedLocation = pos.coords;
-
-                // คำนวณเพื่ออัปเดตสีหมุดทันที
                 let inRange = false;
                 for (const loc of TARGET_LOCATIONS) {
                     if (calculateDistance(pos.coords.latitude, pos.coords.longitude, loc.lat, loc.lng) <= loc.range) {
@@ -455,53 +451,59 @@ function startBackgroundGPS() {
                 console.warn("GPS Pre-fetch failed", err);
                 updateGpsIndicatorColor('searching');
             },
-            { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+            { enableHighAccuracy: false, maximumAge: 15000, timeout: 15000 } // ใช้ความแม่นยำต่ำก่อนเบื้องหลัง
         );
     }
 }
 
-// 🌟 แก้ไข Bug 2: ขยายเวลาดักค้างเป็น 25 วินาที เพื่อให้มีเวลากด "อนุญาตสิทธิ์ Location"
-function getGPSLocation() {
+// 🌟 อัปเกรด 2: Smart GPS Fallback
+// ถ้าระบบหาดาวเทียม (High Accuracy) ไม่เจอใน 8 วิ มันจะสลับไปใช้เน็ต (Low Accuracy) หาให้แทน
+function getSmartGPSLocation() {
     return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) return reject(new Error("บราวเซอร์ของคุณไม่รองรับระบบ GPS"));
+        if (!navigator.geolocation) return reject(new Error("บราวเซอร์ไม่รองรับ GPS"));
 
         let isResolved = false;
 
-        // ตัวตั้งเวลาตัดจบขยายเป็น 25 วินาที เผื่อผู้ใช้เสียเวลากดอนุญาต
-        const fallbackTimer = setTimeout(() => {
+        const masterTimeout = setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
-                reject(new Error("สัญญาณ GPS ขัดข้อง หรือยังไม่ได้อนุญาตสิทธิ์ Location"));
+                reject(new Error("หมดเวลาค้นหาพิกัด กรุณาตรวจสอบสัญญาณเน็ตหรือ GPS"));
             }
-        }, 25000);
+        }, 20000);
 
-        try {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    if (isResolved) return;
-                    isResolved = true;
-                    clearTimeout(fallbackTimer);
-                    resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-                },
-                (err) => {
-                    if (isResolved) return;
-                    isResolved = true;
-                    clearTimeout(fallbackTimer);
-                    let errMsg = "ไม่ทราบสาเหตุ";
-                    if (err.code === 1) errMsg = "ถูกปฏิเสธสิทธิ์ (โปรดอนุญาตสิทธิ์ Location ให้แอป LINE)";
-                    if (err.code === 2) errMsg = "หาพิกัดไม่ได้ (สัญญาณขาดหาย)";
-                    if (err.code === 3) errMsg = "หมดเวลาในการค้นหา (Timeout)";
-                    reject(new Error(errMsg));
-                },
-                // ขยาย Timeout ของตัวดึงพิกัดตามไปด้วย
-                { enableHighAccuracy: true, timeout: 24000, maximumAge: 0 }
-            );
-        } catch (e) {
-            if (isResolved) return;
-            isResolved = true;
-            clearTimeout(fallbackTimer);
-            reject(new Error("ระบบถูกบล็อกการทำงาน"));
-        }
+        // ลองแบบพิกัดดาวเทียมก่อน
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                if (isResolved) return;
+                isResolved = true;
+                clearTimeout(masterTimeout);
+                resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            },
+            (err) => {
+                if (isResolved) return;
+                console.warn("High Accuracy GPS failed, falling back to Wi-Fi/Cellular location...", err);
+
+                // แผนสำรอง: ถ้าหาดาวเทียมไม่เจอในตึก ให้บังคับใช้เน็ต (Low Accuracy)
+                navigator.geolocation.getCurrentPosition(
+                    (posFallback) => {
+                        isResolved = true;
+                        clearTimeout(masterTimeout);
+                        resolve({ lat: posFallback.coords.latitude, lng: posFallback.coords.longitude });
+                    },
+                    (errFallback) => {
+                        isResolved = true;
+                        clearTimeout(masterTimeout);
+                        let errMsg = "ไม่ทราบสาเหตุ";
+                        if (errFallback.code === 1) errMsg = "คุณยังไม่อนุญาตให้ LINE เข้าถึงพิกัดครับ";
+                        if (errFallback.code === 2) errMsg = "อยู่ในมุมอับสัญญาณ หาพิกัดไม่ได้";
+                        if (errFallback.code === 3) errMsg = "อินเทอร์เน็ตหลุด หรือใช้เวลาหานานเกินไป";
+                        reject(new Error(errMsg));
+                    },
+                    { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+                );
+            },
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+        );
     });
 }
 
@@ -520,17 +522,17 @@ async function processOneClickCheckin() {
             return Swal.fire("แจ้งเตือน", "กรุณาเลือกประเภทการลงเวลาก่อนครับ", "warning");
         }
 
-        Swal.fire({ title: 'กำลังตรวจสอบพิกัด...', text: 'รอสักครู่...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        Swal.fire({ title: 'กำลังตรวจสอบพิกัด...', text: 'อาจใช้เวลาสักครู่หากอยู่ในอาคาร', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
         let lat, lng;
         if (cachedLocation) {
             lat = cachedLocation.latitude;
             lng = cachedLocation.longitude;
         } else {
-            const coords = await getGPSLocation();
+            const coords = await getSmartGPSLocation(); // ใช้ระบบ Smart GPS
             lat = coords.lat;
             lng = coords.lng;
-            cachedLocation = { coords: { latitude: lat, longitude: lng } };
+            cachedLocation = { latitude: lat, longitude: lng };
         }
 
         Swal.fire({ title: 'กำลังบันทึกข้อมูล...', text: 'กำลังเชื่อมต่อฐานข้อมูล', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
@@ -538,7 +540,7 @@ async function processOneClickCheckin() {
         await executeCheckin(lat, lng);
 
     } catch (error) {
-        Swal.fire("ข้อผิดพลาด", error.message, "error");
+        Swal.fire({ icon: "error", title: "ข้อผิดพลาด GPS", text: error.message, confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
     }
 }
 
@@ -602,17 +604,17 @@ async function openMapModal() {
     }, 10);
 
     try {
-        Swal.fire({ title: 'กำลังค้นหาพิกัด...', text: 'รอสักครู่...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        Swal.fire({ title: 'กำลังค้นหาพิกัด...', text: 'อาจใช้เวลาสักครู่หากอยู่ในอาคาร', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
         let lat, lng;
         if (cachedLocation) {
             lat = cachedLocation.latitude;
             lng = cachedLocation.longitude;
         } else {
-            const coords = await getGPSLocation();
+            const coords = await getSmartGPSLocation(); // ใช้ระบบ Smart GPS
             lat = coords.lat;
             lng = coords.lng;
-            cachedLocation = { coords: { latitude: lat, longitude: lng } };
+            cachedLocation = { latitude: lat, longitude: lng };
         }
 
         Swal.close();
@@ -636,7 +638,7 @@ async function openMapModal() {
         initOrUpdateMap(lat, lng);
 
     } catch (error) {
-        Swal.fire("ข้อผิดพลาด", error.message, "error");
+        Swal.fire({ icon: "error", title: "ข้อผิดพลาด GPS", text: error.message, confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
     }
 }
 
