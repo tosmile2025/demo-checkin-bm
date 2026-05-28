@@ -575,13 +575,15 @@ async function executeCheckin(lat, lng) {
     let nearestDistance = Infinity;
     let targetLocationName = "ไม่ทราบสถานที่";
 
+    // 1. ตรวจสอบว่าอยู่ในระยะหมุดไหนบ้าง (เรียงจากบนลงล่าง)
     for (const loc of TARGET_LOCATIONS) {
         const distance = calculateDistance(lat, lng, loc.lat, loc.lng);
         if (distance < nearestDistance) nearestDistance = distance;
+
         if (distance <= loc.range) {
             inRange = true;
             targetLocationName = loc.name;
-            break;
+            break; // เจอหมุดแรกที่อยู่ในระยะ ให้หยุดหาและใช้ชื่อหมุดนั้นเลย
         }
     }
 
@@ -590,14 +592,34 @@ async function executeCheckin(lat, lng) {
     }
 
     try {
-        let capturedImageBase64;
-        try {
-            capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
-        } catch (camErr) {
-            throw new Error("โปรดรอให้ภาพจากกล้องแสดงก่อนกดบันทึก");
+        const jobSelect = document.getElementById('chk-job');
+        if (!jobSelect || !jobSelect.value) {
+            return Swal.fire("แจ้งเตือน", "กรุณาเลือกประเภทการลงเวลาก่อนครับ", "warning");
         }
 
-        const jobType = document.getElementById('chk-job').value;
+        Swal.update({
+            title: 'กำลังบันทึกข้อมูลปฏิบัติงาน...',
+            html: 'กำลังส่งข้อมูลเข้าฐานข้อมูล กรุณารอสักครู่'
+        });
+
+        // 🌟 2. โหมดพิเศษ: ถ้าชนหมุดชื่อ "นอกสถานที่" หรือ "อิสระ" ให้ดึงชื่อสถานที่จริงๆ มาบันทึก
+        if (targetLocationName.includes("นอกสถานที่") || targetLocationName.includes("อิสระ")) {
+            try {
+                Swal.update({ html: 'กำลังดึงชื่อตำแหน่งสถานที่จริง...' });
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                const data = await res.json();
+                if (data && data.display_name) {
+                    // ตัดให้ชื่อสั้นลงหน่อยถ้ายาวเกินไป หรือจะเก็บเต็มๆ ก็ได้
+                    targetLocationName = `นอกสถานที่: ${data.display_name}`;
+                }
+            } catch (e) {
+                // ถ้าเน็ตช้าดึงชื่อไม่สำเร็จ ให้บันทึกพิกัดตัวเลขไปแทน
+                targetLocationName = `นอกสถานที่ (พิกัด: ${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+            }
+        }
+
+        const capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
+        const jobType = jobSelect.value;
         const note = document.getElementById('chk-note').value;
         const now = new Date();
 
@@ -611,17 +633,17 @@ async function executeCheckin(lat, lng) {
             time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
             lat: lat,
             long: lng,
-            address: targetLocationName,
+            address: targetLocationName, // 🌟 จะได้ชื่อสถานที่จริงแทนคำว่า นอกสถานที่
             user: currentUserId
         };
 
         const response = await fetch(CONFIG.WEB_APP_API, { method: "POST", body: JSON.stringify(payload) });
-        if (!response.ok) throw new Error("ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
+        if (!response.ok) throw new Error("เครือข่ายขัดข้อง ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
 
         Swal.fire("สำเร็จ!", "บันทึกเวลาเรียบร้อยแล้ว", "success").then(() => sendFlexMessage(payload));
 
     } catch (e) {
-        Swal.fire("ข้อผิดพลาด", e.message, "warning");
+        Swal.fire("ข้อผิดพลาด", e.message || "กรุณาถ่ายภาพก่อนลงเวลา (ไม่พบกล้อง)", "warning");
     }
 }
 

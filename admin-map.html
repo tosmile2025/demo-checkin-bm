@@ -104,6 +104,42 @@
 
     <script src="config.js"></script>
     <script>
+        // ==========================================
+        // 🎨 DYNAMIC THEME SYSTEM 
+        // ==========================================
+        loadAndApplyTheme();
+        function loadAndApplyTheme() {
+            const cachedColor = localStorage.getItem('appThemeColor');
+            if (cachedColor) applyTheme(cachedColor);
+
+            fetch(CONFIG.WEB_APP_API, { method: 'POST', body: JSON.stringify({ action: 'getTheme' }) })
+                .then(res => res.text()).then(text => {
+                    try {
+                        const data = JSON.parse(text);
+                        if (data.color) {
+                            let newColor = data.color.trim();
+                            if (!newColor.startsWith('#')) newColor = '#' + newColor;
+                            if (newColor !== cachedColor) { localStorage.setItem('appThemeColor', newColor); applyTheme(newColor); }
+                        }
+                    } catch (e) { }
+                }).catch(e => { });
+        }
+        function applyTheme(hexColor) {
+            if (!hexColor || hexColor === '') return;
+            let styleTag = document.getElementById('dynamic-theme');
+            if (!styleTag) { styleTag = document.createElement('style'); styleTag.id = 'dynamic-theme'; document.body.appendChild(styleTag); }
+            styleTag.innerHTML = `
+                .bg-medical-700 { background-color: ${hexColor} !important; }
+                .text-medical-700, .text-medical-600 { color: ${hexColor} !important; }
+                .bg-medical-50 { background-color: ${hexColor}1A !important; }
+                .border-medical-500 { border-color: ${hexColor} !important; }
+                .accent-medical-600 { accent-color: ${hexColor} !important; }
+                .focus\\:border-medical-500:focus { border-color: ${hexColor} !important; }
+            `;
+            // ถ้าระบบโหลดแผนที่เสร็จแล้ว ให้วาดหมุดใหม่เพื่อเปลี่ยนสีหมุด
+            if (typeof renderLocations === "function" && locations.length > 0) renderLocations();
+        }
+
         let map;
         let locations = [];
         let currentSelectedIndex = -1;
@@ -124,7 +160,7 @@
                 allowOutsideClick: false,
                 allowEscapeKey: false,
                 confirmButtonText: 'เข้าสู่ระบบ',
-                confirmButtonColor: '#0f766e',
+                confirmButtonColor: localStorage.getItem('appThemeColor') || '#0f766e',
                 showLoaderOnConfirm: true,
                 preConfirm: async (password) => {
                     try {
@@ -194,6 +230,9 @@
             mapLayers = [];
             const bounds = [];
 
+            // 🌟 ดึงสี Theme ปัจจุบันมาใช้กับหมุดแผนที่
+            const themeColor = localStorage.getItem('appThemeColor') || '#0f766e';
+
             locations.forEach((loc, index) => {
                 const isSelected = index === currentSelectedIndex;
 
@@ -206,7 +245,8 @@
         `;
                 listEl.appendChild(item);
 
-                const iconColor = isSelected ? '#0f766e' : '#64748b';
+                // 🌟 ประยุกต์ใช้สี Theme กับหมุดที่เลือก
+                const iconColor = isSelected ? themeColor : '#64748b';
                 const icon = L.divIcon({
                     className: 'custom-div-icon',
                     html: `<div style="background-color:${iconColor}; width:24px; height:24px; border-radius:50%; border:2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; color:white; font-size:10px;">${index + 1}</div>`,
