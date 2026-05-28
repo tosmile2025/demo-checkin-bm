@@ -238,28 +238,47 @@ function switchView(viewId) {
 }
 
 // ==========================================
-// 📸 2. CAMERA 
+// 📸 2. CAMERA (ปรับปรุงเป็น async เพื่อให้รอการตั้งค่าเสร็จสิ้น)
 // ==========================================
-function startCamera(mode) {
+async function startCamera(mode) {
     activeCameraMode = mode;
     const videoEl = document.getElementById(`${mode}-camera-preview`);
-    if (stream) { stream.getTracks().forEach(track => track.stop()); }
+    if (!videoEl) return;
+
+    if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; }
 
     isMirrored = (currentFacingMode === "user");
     applyMirrorEffect(mode);
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } })
-        .then(function (videoStream) {
-            stream = videoStream;
-            videoEl.srcObject = videoStream;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        Swal.fire("ข้อผิดพลาด", "บราวเซอร์ของคุณไม่รองรับการเปิดกล้อง", "error");
+        return;
+    }
+
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false });
+        videoEl.srcObject = stream;
+        videoEl.setAttribute("playsinline", "true");
+        videoEl.play();
+        videoEl.style.display = "block";
+        const previewEl = document.getElementById(`${mode}-preview`);
+        if (previewEl) previewEl.classList.add('hidden');
+    } catch (err) {
+        console.warn("First camera attempt failed, trying fallback...", err);
+        try {
+            // โหมดสำรองเผื่อมือถือบางรุ่นไม่รองรับ facingMode
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            videoEl.srcObject = stream;
+            videoEl.setAttribute("playsinline", "true");
+            videoEl.play();
             videoEl.style.display = "block";
             const previewEl = document.getElementById(`${mode}-preview`);
             if (previewEl) previewEl.classList.add('hidden');
-        })
-        .catch(function (err) {
-            videoEl.outerHTML = `<div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-200 text-slate-500 p-4 text-center border-2 border-dashed border-slate-300"><i class="fas fa-camera-slash text-4xl mb-2 text-rose-400"></i><p class="text-sm font-bold text-slate-700">ไม่สามารถเปิดกล้องได้</p></div>`;
-            Swal.fire({ icon: "warning", title: "เข้าถึงกล้องไม่ได้", text: "กรุณาอนุญาตให้ LINE เข้าถึงกล้องเพื่อถ่ายรูป", confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
-        });
+        } catch (fallbackErr) {
+            console.error("Camera failed:", fallbackErr);
+            Swal.fire({ icon: "warning", title: "เข้าถึงกล้องไม่ได้", text: "กรุณาไปที่การตั้งค่ามือถือ -> อนุญาตให้ LINE เข้าถึงกล้อง", confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
+        }
+    }
 }
 
 function switchCamera(mode) {
@@ -303,8 +322,10 @@ function captureOptimizedFrame(mode) {
 // ==========================================
 let capturedRegImage = null;
 
-function setupRegisterView() {
-    startCamera('reg');
+// 🌟 รอให้กล้องขอสิทธิ์เสร็จก่อน
+async function setupRegisterView() {
+    await startCamera('reg'); // <--- ป้องกันการชนกันของ Pop-up
+
     const captureBtn = document.getElementById('reg-capture-btn');
     const retakeBtn = document.getElementById('reg-retake-btn');
     const previewImg = document.getElementById('reg-preview');
@@ -319,9 +340,9 @@ function setupRegisterView() {
 
             captureBtn.classList.add('hidden');
             retakeBtn.classList.remove('hidden');
-            if (stream) stream.getTracks().forEach(track => track.stop());
+            if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; }
         } catch (e) {
-            Swal.fire("ข้อผิดพลาด", "ไม่สามารถถ่ายภาพได้", "error");
+            Swal.fire("ข้อผิดพลาด", "ไม่สามารถถ่ายภาพได้ โปรดรอกล้องเปิดขึ้นมาก่อน", "error");
         }
     };
 
@@ -366,9 +387,10 @@ function submitRegistration() {
 }
 
 // ==========================================
-// 📍 4. SMART GPS & CHECK-IN LOGIC 
+// 📍 4. SMART GPS & CHECK-IN LOGIC
 // ==========================================
-function setupCheckinView() {
+// 🌟 รอให้กล้องตั้งค่าเสร็จ ค่อยเริ่มดึง GPS (แก้ปัญหา Pop-up ชนกัน)
+async function setupCheckinView() {
     document.getElementById('chk-name').textContent = currentUserData[2];
     document.getElementById('chk-details').textContent = `รหัส: ${currentUserData[3]} | ${currentUserData[4]}`;
 
@@ -379,9 +401,11 @@ function setupCheckinView() {
         document.getElementById('chk-profile-img').src = DEFAULT_AVATAR;
     }
 
-    startCamera('chk');
-    startBackgroundGPS();
     populateJobDropdown();
+
+    // 🌟 จัดคิวการทำงาน: รอกล้องให้เสร็จ -> ค่อยหาพิกัด
+    await startCamera('chk');
+    startBackgroundGPS();
 
     document.getElementById('btn-checkin').onclick = processOneClickCheckin;
 }
@@ -431,7 +455,6 @@ function updateGpsIndicatorColor(state) {
     }
 }
 
-// 🌟 อัปเกรด 1: ตัวจับ GPS เบื้องหลัง ยอมใช้ค่าเก่าได้ 15 วินาที เพื่อให้เร็วขึ้น
 function startBackgroundGPS() {
     updateGpsIndicatorColor('searching');
 
@@ -451,27 +474,27 @@ function startBackgroundGPS() {
                 console.warn("GPS Pre-fetch failed", err);
                 updateGpsIndicatorColor('searching');
             },
-            { enableHighAccuracy: false, maximumAge: 15000, timeout: 15000 } // ใช้ความแม่นยำต่ำก่อนเบื้องหลัง
+            { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
         );
     }
 }
 
-// 🌟 อัปเกรด 2: Smart GPS Fallback
-// ถ้าระบบหาดาวเทียม (High Accuracy) ไม่เจอใน 8 วิ มันจะสลับไปใช้เน็ต (Low Accuracy) หาให้แทน
+// 🌟 ระบบ GPS แบบฉลาด (สลับแผนดาวเทียม -> เน็ตมือถือ)
 function getSmartGPSLocation() {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) return reject(new Error("บราวเซอร์ไม่รองรับ GPS"));
 
         let isResolved = false;
 
+        // เวลาสูงสุด 15 วินาที ถ้าไม่เจอเลยจะฟ้อง Error ชัดเจน
         const masterTimeout = setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
-                reject(new Error("หมดเวลาค้นหาพิกัด กรุณาตรวจสอบสัญญาณเน็ตหรือ GPS"));
+                reject(new Error("หมดเวลาค้นหาพิกัด กรุณาตรวจสอบสัญญาณเน็ตหรือเปิด GPS บนมือถือ"));
             }
-        }, 20000);
+        }, 15000);
 
-        // ลองแบบพิกัดดาวเทียมก่อน
+        // 1. ลองหาพิกัดแบบแม่นยำสูง (GPS ดาวเทียม) ก่อน 6 วินาที
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 if (isResolved) return;
@@ -481,28 +504,30 @@ function getSmartGPSLocation() {
             },
             (err) => {
                 if (isResolved) return;
-                console.warn("High Accuracy GPS failed, falling back to Wi-Fi/Cellular location...", err);
+                console.warn("GPS ดาวเทียมหาไม่เจอ สลับไปใช้สัญญาณเน็ต/Wi-Fi", err);
 
-                // แผนสำรอง: ถ้าหาดาวเทียมไม่เจอในตึก ให้บังคับใช้เน็ต (Low Accuracy)
+                // 2. ถ้าหาดาวเทียมไม่เจอในตึก สลับมาใช้พิกัดจากเสาสัญญาณมือถือ (ไม่บังคับ High Accuracy)
                 navigator.geolocation.getCurrentPosition(
                     (posFallback) => {
+                        if (isResolved) return;
                         isResolved = true;
                         clearTimeout(masterTimeout);
                         resolve({ lat: posFallback.coords.latitude, lng: posFallback.coords.longitude });
                     },
                     (errFallback) => {
+                        if (isResolved) return;
                         isResolved = true;
                         clearTimeout(masterTimeout);
-                        let errMsg = "ไม่ทราบสาเหตุ";
-                        if (errFallback.code === 1) errMsg = "คุณยังไม่อนุญาตให้ LINE เข้าถึงพิกัดครับ";
-                        if (errFallback.code === 2) errMsg = "อยู่ในมุมอับสัญญาณ หาพิกัดไม่ได้";
-                        if (errFallback.code === 3) errMsg = "อินเทอร์เน็ตหลุด หรือใช้เวลาหานานเกินไป";
+                        let errMsg = "ไม่สามารถระบุตำแหน่งได้";
+                        if (errFallback.code === 1) errMsg = "กรุณาไปที่ตั้งค่ามือถือ -> อนุญาตให้ LINE เข้าถึง 'ตำแหน่ง (Location)'";
+                        if (errFallback.code === 2) errMsg = "อยู่ในมุมอับสัญญาณ ลองเชื่อมต่อ Wi-Fi หรือออกมาที่โล่ง";
+                        if (errFallback.code === 3) errMsg = "หมดเวลาการค้นหาพิกัด";
                         reject(new Error(errMsg));
                     },
-                    { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+                    { enableHighAccuracy: false, timeout: 7000, maximumAge: 60000 }
                 );
             },
-            { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+            { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
         );
     });
 }
@@ -529,18 +554,19 @@ async function processOneClickCheckin() {
             lat = cachedLocation.latitude;
             lng = cachedLocation.longitude;
         } else {
-            const coords = await getSmartGPSLocation(); // ใช้ระบบ Smart GPS
+            const coords = await getSmartGPSLocation();
             lat = coords.lat;
             lng = coords.lng;
             cachedLocation = { latitude: lat, longitude: lng };
         }
 
-        Swal.fire({ title: 'กำลังบันทึกข้อมูล...', text: 'กำลังเชื่อมต่อฐานข้อมูล', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        // 🌟 เปลี่ยนข้อความทันทีเมื่อได้พิกัดแล้ว
+        Swal.fire({ title: 'กำลังบันทึกข้อมูล...', text: 'กำลังอัปโหลดรูปภาพและข้อมูล', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
         await executeCheckin(lat, lng);
 
     } catch (error) {
-        Swal.fire({ icon: "error", title: "ข้อผิดพลาด GPS", text: error.message, confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
+        Swal.fire({ icon: "error", title: "แจ้งเตือนพิกัด", text: error.message, confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
     }
 }
 
@@ -564,7 +590,13 @@ async function executeCheckin(lat, lng) {
     }
 
     try {
-        const capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
+        let capturedImageBase64;
+        try {
+            capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
+        } catch (camErr) {
+            throw new Error("โปรดรอให้ภาพจากกล้องแสดงก่อนกดบันทึก");
+        }
+
         const jobType = document.getElementById('chk-job').value;
         const note = document.getElementById('chk-note').value;
         const now = new Date();
@@ -584,12 +616,12 @@ async function executeCheckin(lat, lng) {
         };
 
         const response = await fetch(CONFIG.WEB_APP_API, { method: "POST", body: JSON.stringify(payload) });
-        if (!response.ok) throw new Error("เครือข่ายขัดข้อง");
+        if (!response.ok) throw new Error("ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
 
         Swal.fire("สำเร็จ!", "บันทึกเวลาเรียบร้อยแล้ว", "success").then(() => sendFlexMessage(payload));
 
     } catch (e) {
-        Swal.fire("ข้อผิดพลาด", "ไม่สามารถถ่ายภาพหรือเชื่อมต่อฐานข้อมูลได้", "warning");
+        Swal.fire("ข้อผิดพลาด", e.message, "warning");
     }
 }
 
@@ -611,7 +643,7 @@ async function openMapModal() {
             lat = cachedLocation.latitude;
             lng = cachedLocation.longitude;
         } else {
-            const coords = await getSmartGPSLocation(); // ใช้ระบบ Smart GPS
+            const coords = await getSmartGPSLocation();
             lat = coords.lat;
             lng = coords.lng;
             cachedLocation = { latitude: lat, longitude: lng };
@@ -638,7 +670,7 @@ async function openMapModal() {
         initOrUpdateMap(lat, lng);
 
     } catch (error) {
-        Swal.fire({ icon: "error", title: "ข้อผิดพลาด GPS", text: error.message, confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
+        Swal.fire({ icon: "error", title: "แจ้งเตือน", text: error.message, confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
     }
 }
 
@@ -684,7 +716,7 @@ function closeMapModal() {
 // 💬 6. LINE FLEX MESSAGE
 // ==========================================
 async function sendFlexMessage(data) {
-    const jobColor = data.job === 'เข้าเวร' ? (localStorage.getItem('appThemeColor') || '#0f766e') : data.job === 'ออกเวร' ? '#e11d48' : '#d97706';
+    const jobColor = localStorage.getItem('appThemeColor') || '#0f766e';
 
     const now = new Date();
     const thaiMonths = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
