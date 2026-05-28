@@ -236,61 +236,28 @@ function switchView(viewId) {
 }
 
 // ==========================================
-// 📸 2. CAMERA (ระบบกล้อง อัปเกรดป้องกันการค้าง)
+// 📸 2. CAMERA 
 // ==========================================
-async function startCamera(mode) {
+function startCamera(mode) {
     activeCameraMode = mode;
     const videoEl = document.getElementById(`${mode}-camera-preview`);
-    if (!videoEl) return;
-
-    // หยุดกล้องเก่าก่อนถ้ามี
-    if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-    }
+    if (stream) { stream.getTracks().forEach(track => track.stop()); }
 
     isMirrored = (currentFacingMode === "user");
     applyMirrorEffect(mode);
 
-    // เช็คว่า Browser รองรับกล้องหรือไม่
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        Swal.fire("ข้อผิดพลาด", "บราวเซอร์ของคุณไม่รองรับการเปิดกล้อง", "error");
-        return;
-    }
-
-    try {
-        // 🌟 ลองเปิดด้วยความละเอียดปกติก่อน
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false });
-        videoEl.srcObject = stream;
-        videoEl.setAttribute("playsinline", true); // สำคัญสำหรับ iOS
-        videoEl.play();
-        videoEl.style.display = "block";
-
-        const previewEl = document.getElementById(`${mode}-preview`);
-        if (previewEl) previewEl.classList.add('hidden');
-
-    } catch (err) {
-        console.warn("First camera attempt failed, trying fallback...", err);
-        // 🌟 โหมดสำรอง: เผื่อมือถือบางรุ่นไม่รองรับ facingMode
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-            videoEl.srcObject = stream;
-            videoEl.setAttribute("playsinline", true);
-            videoEl.play();
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } })
+        .then(function (videoStream) {
+            stream = videoStream;
+            videoEl.srcObject = videoStream;
             videoEl.style.display = "block";
-
             const previewEl = document.getElementById(`${mode}-preview`);
             if (previewEl) previewEl.classList.add('hidden');
-        } catch (fallbackErr) {
-            console.error("Camera completely failed:", fallbackErr);
-            Swal.fire({
-                icon: "warning",
-                title: "เข้าถึงกล้องไม่ได้",
-                text: "กรุณาอนุญาตให้แอป LINE เข้าถึงกล้องในการตั้งค่ามือถือเพื่อถ่ายรูปครับ",
-                confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e"
-            });
-        }
-    }
+        })
+        .catch(function (err) {
+            videoEl.outerHTML = `<div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-200 text-slate-500 p-4 text-center border-2 border-dashed border-slate-300"><i class="fas fa-camera-slash text-4xl mb-2 text-rose-400"></i><p class="text-sm font-bold text-slate-700">ไม่สามารถเปิดกล้องได้</p></div>`;
+            Swal.fire({ icon: "warning", title: "เข้าถึงกล้องไม่ได้", text: "กรุณาอนุญาตให้ LINE เข้าถึงกล้องเพื่อถ่ายรูป", confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
+        });
 }
 
 function switchCamera(mode) {
@@ -313,7 +280,7 @@ function applyMirrorEffect(mode) {
 
 function captureOptimizedFrame(mode) {
     const video = document.getElementById(`${mode}-camera-preview`);
-    if (!video || !video.videoWidth) throw new Error("ไม่มีภาพจากกล้อง");
+    if (!video || !video.videoWidth) throw new Error("ไม่พบภาพจากกล้อง");
 
     const canvas = document.createElement("canvas");
     const scale = 600 / video.videoWidth;
@@ -352,7 +319,7 @@ function setupRegisterView() {
             retakeBtn.classList.remove('hidden');
             if (stream) stream.getTracks().forEach(track => track.stop());
         } catch (e) {
-            Swal.fire("ข้อผิดพลาด", "ไม่สามารถถ่ายภาพได้ (โปรดรอให้กล้องเปิดติดก่อน)", "warning");
+            Swal.fire("ข้อผิดพลาด", "ไม่สามารถถ่ายภาพได้", "error");
         }
     };
 
@@ -397,7 +364,7 @@ function submitRegistration() {
 }
 
 // ==========================================
-// 📍 4. FAST GPS & CHECK-IN LOGIC
+// 📍 4. FAST GPS & DEBUG CHECK-IN LOGIC
 // ==========================================
 function setupCheckinView() {
     document.getElementById('chk-name').textContent = currentUserData[2];
@@ -461,41 +428,115 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-async function executeCheckin(lat, lng) {
-    let inRange = false;
-    let nearestDistance = Infinity;
-    let targetLocationName = "ไม่ทราบสถานที่";
+// 🌟 ฟังก์ชันพิมพ์ Log แจ้งสถานะในจอ
+function logDebug(message, type = "info") {
+    const logBox = document.getElementById('debug-log');
+    if (logBox) {
+        let colorClass = "text-slate-300";
+        if (type === "success") colorClass = "text-emerald-400 font-bold";
+        if (type === "error") colorClass = "text-rose-400 font-bold";
+        logBox.innerHTML += `<div class="${colorClass} mb-1">${message}</div>`;
+        logBox.scrollTop = logBox.scrollHeight; // เลื่อนจอลงอัตโนมัติ
+    }
+    console.log(`[DEBUG] ${message}`);
+}
 
-    for (const loc of TARGET_LOCATIONS) {
-        const distance = calculateDistance(lat, lng, loc.lat, loc.lng);
-        if (distance < nearestDistance) nearestDistance = distance;
-        if (distance <= loc.range) {
-            inRange = true;
-            targetLocationName = loc.name;
-            break;
+// 🌟 กดปุ่มลงเวลา (เพิ่มหน้าต่าง Debug)
+function processOneClickCheckin() {
+    Swal.fire({
+        title: 'กำลังดำเนินการ...',
+        html: `
+            <div class="text-xs text-slate-500 mb-3">กรุณารอสักครู่ ระบบกำลังทำงานตามขั้นตอน</div>
+            <div id="debug-log" class="text-left text-[11px] bg-slate-900 border border-slate-700 p-3 rounded-lg h-32 overflow-y-auto font-mono"></div>
+        `,
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+            logDebug("▶️ [1/3] เริ่มกระบวนการลงเวลา...");
+
+            if (cachedLocation) {
+                logDebug("✅ ดึงพิกัดจากระบบพื้นหลังได้สำเร็จ", "success");
+                executeCheckin(cachedLocation.latitude, cachedLocation.longitude);
+            } else {
+                if (!navigator.geolocation) {
+                    logDebug("❌ บราวเซอร์ไม่รองรับ GPS", "error");
+                    return Swal.fire("ไม่รองรับ", "อุปกรณ์ของคุณไม่รองรับ GPS", "error");
+                }
+
+                logDebug("⏳ กำลังรอสัญญาณ GPS จากดาวเทียม...");
+
+                // จับเวลา 15 วิ ป้องกันแอป LINE ค้าง
+                let gpsTimeout = setTimeout(() => {
+                    logDebug("⚠️ สัญญาณ GPS ตอบกลับช้ากว่าปกติ", "error");
+                    logDebug("กรุณาตรวจสอบการเปิดพิกัด หรือสลับเน็ตมือถือ");
+                }, 15000);
+
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        clearTimeout(gpsTimeout);
+                        logDebug("✅ ค้นหาพิกัดสำเร็จ!", "success");
+                        executeCheckin(pos.coords.latitude, pos.coords.longitude);
+                    },
+                    (err) => {
+                        clearTimeout(gpsTimeout);
+                        let errMsg = "ไม่ทราบสาเหตุ";
+                        if (err.code === 1) errMsg = "ถูกปฏิเสธสิทธิ์ (Permission Denied)";
+                        if (err.code === 2) errMsg = "สัญญาณขาดหาย (Position Unavailable)";
+                        if (err.code === 3) errMsg = "หมดเวลา (Timeout)";
+
+                        logDebug(`❌ ดึงพิกัดล้มเหลว: ${errMsg}`, "error");
+                        Swal.fire("เกิดข้อผิดพลาด", "กรุณาอนุญาตสิทธิ์ Location ให้แอป LINE", "error");
+                    },
+                    { enableHighAccuracy: true, timeout: 15000 }
+                );
+            }
         }
-    }
+    });
+}
 
-    if (!inRange) {
-        return Swal.fire({ icon: "error", title: "อยู่นอกพื้นที่!", text: `คุณอยู่ห่างจากจุดลงเวลาที่ใกล้ที่สุด ${nearestDistance.toFixed(0)} เมตร`, confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
-    }
-
+// 🌟 ตัวรันการทำงานหลัก (ดัก Error ไว้ทุกบรรทัด)
+async function executeCheckin(lat, lng) {
     try {
+        logDebug(`▶️ [2/3] กำลังคำนวณระยะทางและเตรียมรูปภาพ...`);
+        let inRange = false;
+        let nearestDistance = Infinity;
+        let targetLocationName = "ไม่ทราบสถานที่";
+
+        for (const loc of TARGET_LOCATIONS) {
+            const distance = calculateDistance(lat, lng, loc.lat, loc.lng);
+            if (distance < nearestDistance) nearestDistance = distance;
+            if (distance <= loc.range) {
+                inRange = true;
+                targetLocationName = loc.name;
+                break;
+            }
+        }
+
+        if (!inRange) {
+            logDebug(`❌ ระยะห่าง ${nearestDistance.toFixed(0)} ม. (อยู่นอกพื้นที่)`, "error");
+            return Swal.fire({ icon: "error", title: "อยู่นอกพื้นที่!", text: `ห่างจากจุดลงเวลา ${nearestDistance.toFixed(0)} เมตร`, confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
+        }
+        logDebug(`✅ ระยะห่าง ${nearestDistance.toFixed(0)} ม. (ผ่าน)`, "success");
+
         const jobSelect = document.getElementById('chk-job');
         if (!jobSelect || !jobSelect.value) {
+            logDebug(`❌ ไม่ได้เลือกประเภทการลงเวลา`, "error");
             return Swal.fire("แจ้งเตือน", "กรุณาเลือกประเภทการลงเวลาก่อนครับ", "warning");
         }
 
-        Swal.update({
-            title: 'กำลังบันทึกข้อมูลปฏิบัติงาน...',
-            html: 'กำลังส่งข้อมูลเข้าฐานข้อมูล กรุณารอสักครู่'
-        });
+        let capturedImageBase64;
+        try {
+            capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
+            logDebug(`✅ ดึงภาพจากกล้องสำเร็จ`, "success");
+        } catch (camErr) {
+            logDebug(`❌ กล้องยังไม่พร้อมใช้งาน`, "error");
+            throw new Error("กรุณารอให้ภาพกล้องแสดงบนหน้าจอก่อนกดบันทึก");
+        }
 
         const jobType = jobSelect.value;
-        const capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
         const note = document.getElementById('chk-note').value;
-
         const now = new Date();
+
         const payload = {
             base64: capturedImageBase64,
             name: currentUserData[2],
@@ -510,29 +551,21 @@ async function executeCheckin(lat, lng) {
             user: currentUserId
         };
 
-        fetch(CONFIG.WEB_APP_API, { method: "POST", body: JSON.stringify(payload) })
-            .then(() => {
-                Swal.fire("สำเร็จ!", "บันทึกเวลาเรียบร้อยแล้ว", "success").then(() => sendFlexMessage(payload));
-            })
-            .catch(() => Swal.fire("ข้อผิดพลาด", "ไม่สามารถบันทึกข้อมูลได้ (ปัญหาเครือข่าย)", "error"));
+        logDebug(`▶️ [3/3] กำลังอัปโหลดข้อมูลไปยังฐานข้อมูล...`);
+
+        const response = await fetch(CONFIG.WEB_APP_API, { method: "POST", body: JSON.stringify(payload) });
+
+        if (!response.ok) {
+            logDebug(`❌ Server Error (รหัส: ${response.status})`, "error");
+            throw new Error("เซิร์ฟเวอร์ฐานข้อมูลไม่ตอบสนอง");
+        }
+
+        logDebug(`✅ บันทึกเวลาสำเร็จ!`, "success");
+        Swal.fire("สำเร็จ!", "บันทึกเวลาเรียบร้อยแล้ว", "success").then(() => sendFlexMessage(payload));
+
     } catch (e) {
-        Swal.fire("ข้อผิดพลาด", "กรุณาถ่ายภาพก่อนลงเวลา (ระบบไม่พบภาพ)", "warning");
-    }
-}
-
-function processOneClickCheckin() {
-    Swal.fire({ title: 'กำลังตรวจสอบพิกัด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-
-    if (cachedLocation) {
-        executeCheckin(cachedLocation.latitude, cachedLocation.longitude);
-    } else {
-        if (!navigator.geolocation) return Swal.fire("ไม่รองรับ", "อุปกรณ์ของคุณไม่รองรับ GPS", "error");
-
-        navigator.geolocation.getCurrentPosition(
-            (pos) => { executeCheckin(pos.coords.latitude, pos.coords.longitude); },
-            (err) => { Swal.fire("เกิดข้อผิดพลาด", "กรุณาเปิดสิทธิ์ GPS (Location) ให้แอป LINE เพื่อลงเวลา", "error"); },
-            { enableHighAccuracy: true, timeout: 10000 }
-        );
+        logDebug(`❌ ขัดข้อง: ${e.message}`, "error");
+        Swal.fire("ข้อผิดพลาด", e.message, "error");
     }
 }
 
