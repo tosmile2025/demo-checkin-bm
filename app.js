@@ -236,28 +236,61 @@ function switchView(viewId) {
 }
 
 // ==========================================
-// 📸 2. CAMERA 
+// 📸 2. CAMERA (ระบบกล้อง อัปเกรดป้องกันการค้าง)
 // ==========================================
-function startCamera(mode) {
+async function startCamera(mode) {
     activeCameraMode = mode;
     const videoEl = document.getElementById(`${mode}-camera-preview`);
-    if (stream) { stream.getTracks().forEach(track => track.stop()); }
+    if (!videoEl) return;
+
+    // หยุดกล้องเก่าก่อนถ้ามี
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
 
     isMirrored = (currentFacingMode === "user");
     applyMirrorEffect(mode);
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode } })
-        .then(function (videoStream) {
-            stream = videoStream;
-            videoEl.srcObject = videoStream;
+    // เช็คว่า Browser รองรับกล้องหรือไม่
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        Swal.fire("ข้อผิดพลาด", "บราวเซอร์ของคุณไม่รองรับการเปิดกล้อง", "error");
+        return;
+    }
+
+    try {
+        // 🌟 ลองเปิดด้วยความละเอียดปกติก่อน
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false });
+        videoEl.srcObject = stream;
+        videoEl.setAttribute("playsinline", true); // สำคัญสำหรับ iOS
+        videoEl.play();
+        videoEl.style.display = "block";
+
+        const previewEl = document.getElementById(`${mode}-preview`);
+        if (previewEl) previewEl.classList.add('hidden');
+
+    } catch (err) {
+        console.warn("First camera attempt failed, trying fallback...", err);
+        // 🌟 โหมดสำรอง: เผื่อมือถือบางรุ่นไม่รองรับ facingMode
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            videoEl.srcObject = stream;
+            videoEl.setAttribute("playsinline", true);
+            videoEl.play();
             videoEl.style.display = "block";
+
             const previewEl = document.getElementById(`${mode}-preview`);
             if (previewEl) previewEl.classList.add('hidden');
-        })
-        .catch(function (err) {
-            videoEl.outerHTML = `<div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-200 text-slate-500 p-4 text-center border-2 border-dashed border-slate-300"><i class="fas fa-camera-slash text-4xl mb-2 text-rose-400"></i><p class="text-sm font-bold text-slate-700">ไม่สามารถเปิดกล้องได้</p></div>`;
-            Swal.fire({ icon: "warning", title: "เข้าถึงกล้องไม่ได้", text: "กรุณาอนุญาตให้ LINE เข้าถึงกล้องเพื่อถ่ายรูป", confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
-        });
+        } catch (fallbackErr) {
+            console.error("Camera completely failed:", fallbackErr);
+            Swal.fire({
+                icon: "warning",
+                title: "เข้าถึงกล้องไม่ได้",
+                text: "กรุณาอนุญาตให้แอป LINE เข้าถึงกล้องในการตั้งค่ามือถือเพื่อถ่ายรูปครับ",
+                confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e"
+            });
+        }
+    }
 }
 
 function switchCamera(mode) {
@@ -319,7 +352,7 @@ function setupRegisterView() {
             retakeBtn.classList.remove('hidden');
             if (stream) stream.getTracks().forEach(track => track.stop());
         } catch (e) {
-            Swal.fire("ข้อผิดพลาด", "ไม่สามารถถ่ายภาพได้", "error");
+            Swal.fire("ข้อผิดพลาด", "ไม่สามารถถ่ายภาพได้ (โปรดรอให้กล้องเปิดติดก่อน)", "warning");
         }
     };
 
@@ -410,7 +443,6 @@ function populateJobDropdown() {
     }
 }
 
-// 🌟 นำโค้ด Background GPS ดั้งเดิมของคุณกลับมา 100%
 function startBackgroundGPS() {
     if (navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(
@@ -454,7 +486,6 @@ async function executeCheckin(lat, lng) {
             return Swal.fire("แจ้งเตือน", "กรุณาเลือกประเภทการลงเวลาก่อนครับ", "warning");
         }
 
-        // 🌟 แก้ปัญหาคนบ่นระบบค้าง: สั่งเปลี่ยนข้อความทันทีที่กำลังอัปโหลดข้อมูล (พ้นระยะหา GPS มาแล้ว)
         Swal.update({
             title: 'กำลังบันทึกข้อมูลปฏิบัติงาน...',
             html: 'กำลังส่งข้อมูลเข้าฐานข้อมูล กรุณารอสักครู่'
@@ -485,11 +516,10 @@ async function executeCheckin(lat, lng) {
             })
             .catch(() => Swal.fire("ข้อผิดพลาด", "ไม่สามารถบันทึกข้อมูลได้ (ปัญหาเครือข่าย)", "error"));
     } catch (e) {
-        Swal.fire("ข้อผิดพลาด", "กรุณาถ่ายภาพก่อนลงเวลา (ไม่พบกล้อง)", "warning");
+        Swal.fire("ข้อผิดพลาด", "กรุณาถ่ายภาพก่อนลงเวลา (ระบบไม่พบภาพ)", "warning");
     }
 }
 
-// 🌟 นำโค้ด One Click Check-in ดั้งเดิมของคุณกลับมา 100% (ไม่มีตัวตั้งเวลาตัดจบแล้ว)
 function processOneClickCheckin() {
     Swal.fire({ title: 'กำลังตรวจสอบพิกัด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
@@ -500,7 +530,7 @@ function processOneClickCheckin() {
 
         navigator.geolocation.getCurrentPosition(
             (pos) => { executeCheckin(pos.coords.latitude, pos.coords.longitude); },
-            (err) => { Swal.fire("เกิดข้อผิดพลาด", "กรุณาเปิด GPS (Location) เพื่อลงเวลา", "error"); },
+            (err) => { Swal.fire("เกิดข้อผิดพลาด", "กรุณาเปิดสิทธิ์ GPS (Location) ให้แอป LINE เพื่อลงเวลา", "error"); },
             { enableHighAccuracy: true, timeout: 10000 }
         );
     }
@@ -509,7 +539,6 @@ function processOneClickCheckin() {
 // ==========================================
 // 🗺️ 5. MAP MODAL (LEAFLET) 
 // ==========================================
-// 🌟 นำโค้ดแผนที่ดั้งเดิมของคุณกลับมา 100%
 function openMapModal() {
     document.getElementById('mapModal').classList.remove('hidden');
 
