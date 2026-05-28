@@ -152,7 +152,7 @@ async function fetchRolesSettings() {
             deptSelect.appendChild(option);
         });
     } catch (error) {
-        deptSelect.innerHTML = '<option value="" disabled selected>-- ❌ โหลดข้อมูลตำแหน่งล้มเหลว --</option>';
+        deptSelect.innerHTML = '<option value="" disabled selected>-- ❌ โหลดข้อมูลล้มเหลว --</option>';
     }
 }
 
@@ -364,7 +364,7 @@ function submitRegistration() {
 }
 
 // ==========================================
-// 📍 4. FAST GPS & DEBUG CHECK-IN LOGIC
+// 📍 4. FAST GPS & CHECK-IN LOGIC (ป้องกันการหมุนค้าง 100%)
 // ==========================================
 function setupCheckinView() {
     document.getElementById('chk-name').textContent = currentUserData[2];
@@ -420,6 +420,50 @@ function startBackgroundGPS() {
     }
 }
 
+// 🌟 ฟังก์ชันหลักสำหรับดึง GPS (แก้ไขให้ไม่ให้เกิดการค้าง)
+function getGPSLocation() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) return reject(new Error("บราวเซอร์ของคุณไม่รองรับระบบ GPS"));
+
+        let isResolved = false;
+
+        // ตัวตั้งเวลาตัดจบ 10 วินาที ป้องกันการค้างตลอดกาล
+        const fallbackTimer = setTimeout(() => {
+            if (!isResolved) {
+                isResolved = true;
+                reject(new Error("สัญญาณ GPS ขัดข้อง หรือใช้เวลาหาพิกัดนานเกินไป"));
+            }
+        }, 10000);
+
+        try {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    if (isResolved) return;
+                    isResolved = true;
+                    clearTimeout(fallbackTimer);
+                    resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                },
+                (err) => {
+                    if (isResolved) return;
+                    isResolved = true;
+                    clearTimeout(fallbackTimer);
+                    let errMsg = "ไม่ทราบสาเหตุ";
+                    if (err.code === 1) errMsg = "ถูกปฏิเสธสิทธิ์ (โปรดอนุญาตสิทธิ์ Location)";
+                    if (err.code === 2) errMsg = "หาพิกัดไม่ได้ (สัญญาณขาดหาย)";
+                    if (err.code === 3) errMsg = "หมดเวลาในการค้นหา (Timeout)";
+                    reject(new Error(errMsg));
+                },
+                { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 }
+            );
+        } catch (e) {
+            if (isResolved) return;
+            isResolved = true;
+            clearTimeout(fallbackTimer);
+            reject(new Error("ระบบถูกบล็อกการทำงาน"));
+        }
+    });
+}
+
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371e3;
     const p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180;
@@ -428,112 +472,60 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// 🌟 ฟังก์ชันพิมพ์ Log แจ้งสถานะในจอ
-function logDebug(message, type = "info") {
-    const logBox = document.getElementById('debug-log');
-    if (logBox) {
-        let colorClass = "text-slate-300";
-        if (type === "success") colorClass = "text-emerald-400 font-bold";
-        if (type === "error") colorClass = "text-rose-400 font-bold";
-        logBox.innerHTML += `<div class="${colorClass} mb-1">${message}</div>`;
-        logBox.scrollTop = logBox.scrollHeight; // เลื่อนจอลงอัตโนมัติ
-    }
-    console.log(`[DEBUG] ${message}`);
-}
-
-// 🌟 กดปุ่มลงเวลา (เพิ่มหน้าต่าง Debug)
-function processOneClickCheckin() {
-    Swal.fire({
-        title: 'กำลังดำเนินการ...',
-        html: `
-            <div class="text-xs text-slate-500 mb-3">กรุณารอสักครู่ ระบบกำลังทำงานตามขั้นตอน</div>
-            <div id="debug-log" class="text-left text-[11px] bg-slate-900 border border-slate-700 p-3 rounded-lg h-32 overflow-y-auto font-mono"></div>
-        `,
-        allowOutsideClick: false,
-        didOpen: () => {
-            Swal.showLoading();
-            logDebug("▶️ [1/3] เริ่มกระบวนการลงเวลา...");
-
-            if (cachedLocation) {
-                logDebug("✅ ดึงพิกัดจากระบบพื้นหลังได้สำเร็จ", "success");
-                executeCheckin(cachedLocation.latitude, cachedLocation.longitude);
-            } else {
-                if (!navigator.geolocation) {
-                    logDebug("❌ บราวเซอร์ไม่รองรับ GPS", "error");
-                    return Swal.fire("ไม่รองรับ", "อุปกรณ์ของคุณไม่รองรับ GPS", "error");
-                }
-
-                logDebug("⏳ กำลังรอสัญญาณ GPS จากดาวเทียม...");
-
-                // จับเวลา 15 วิ ป้องกันแอป LINE ค้าง
-                let gpsTimeout = setTimeout(() => {
-                    logDebug("⚠️ สัญญาณ GPS ตอบกลับช้ากว่าปกติ", "error");
-                    logDebug("กรุณาตรวจสอบการเปิดพิกัด หรือสลับเน็ตมือถือ");
-                }, 15000);
-
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        clearTimeout(gpsTimeout);
-                        logDebug("✅ ค้นหาพิกัดสำเร็จ!", "success");
-                        executeCheckin(pos.coords.latitude, pos.coords.longitude);
-                    },
-                    (err) => {
-                        clearTimeout(gpsTimeout);
-                        let errMsg = "ไม่ทราบสาเหตุ";
-                        if (err.code === 1) errMsg = "ถูกปฏิเสธสิทธิ์ (Permission Denied)";
-                        if (err.code === 2) errMsg = "สัญญาณขาดหาย (Position Unavailable)";
-                        if (err.code === 3) errMsg = "หมดเวลา (Timeout)";
-
-                        logDebug(`❌ ดึงพิกัดล้มเหลว: ${errMsg}`, "error");
-                        Swal.fire("เกิดข้อผิดพลาด", "กรุณาอนุญาตสิทธิ์ Location ให้แอป LINE", "error");
-                    },
-                    { enableHighAccuracy: true, timeout: 15000 }
-                );
-            }
-        }
-    });
-}
-
-// 🌟 ตัวรันการทำงานหลัก (ดัก Error ไว้ทุกบรรทัด)
-async function executeCheckin(lat, lng) {
+// 🌟 ระบบบันทึกที่อัปเดตข้อความชัดเจน
+async function processOneClickCheckin() {
     try {
-        logDebug(`▶️ [2/3] กำลังคำนวณระยะทางและเตรียมรูปภาพ...`);
-        let inRange = false;
-        let nearestDistance = Infinity;
-        let targetLocationName = "ไม่ทราบสถานที่";
-
-        for (const loc of TARGET_LOCATIONS) {
-            const distance = calculateDistance(lat, lng, loc.lat, loc.lng);
-            if (distance < nearestDistance) nearestDistance = distance;
-            if (distance <= loc.range) {
-                inRange = true;
-                targetLocationName = loc.name;
-                break;
-            }
-        }
-
-        if (!inRange) {
-            logDebug(`❌ ระยะห่าง ${nearestDistance.toFixed(0)} ม. (อยู่นอกพื้นที่)`, "error");
-            return Swal.fire({ icon: "error", title: "อยู่นอกพื้นที่!", text: `ห่างจากจุดลงเวลา ${nearestDistance.toFixed(0)} เมตร`, confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
-        }
-        logDebug(`✅ ระยะห่าง ${nearestDistance.toFixed(0)} ม. (ผ่าน)`, "success");
-
         const jobSelect = document.getElementById('chk-job');
         if (!jobSelect || !jobSelect.value) {
-            logDebug(`❌ ไม่ได้เลือกประเภทการลงเวลา`, "error");
             return Swal.fire("แจ้งเตือน", "กรุณาเลือกประเภทการลงเวลาก่อนครับ", "warning");
         }
 
-        let capturedImageBase64;
-        try {
-            capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
-            logDebug(`✅ ดึงภาพจากกล้องสำเร็จ`, "success");
-        } catch (camErr) {
-            logDebug(`❌ กล้องยังไม่พร้อมใช้งาน`, "error");
-            throw new Error("กรุณารอให้ภาพกล้องแสดงบนหน้าจอก่อนกดบันทึก");
+        // เริ่มโหลด
+        Swal.fire({ title: 'กำลังตรวจสอบพิกัด...', text: 'รอสักครู่...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+        let lat, lng;
+        if (cachedLocation) {
+            lat = cachedLocation.latitude;
+            lng = cachedLocation.longitude;
+        } else {
+            const coords = await getGPSLocation();
+            lat = coords.lat;
+            lng = coords.lng;
+            cachedLocation = { coords: { latitude: lat, longitude: lng } }; // อัปเดตแคช
         }
 
-        const jobType = jobSelect.value;
+        // เปลี่ยนข้อความบนจอ เพื่อให้รู้ว่ากำลังทำขั้นตอนต่อไป ไม่ได้ค้างที่ GPS
+        Swal.fire({ title: 'กำลังบันทึกข้อมูล...', text: 'กำลังเชื่อมต่อฐานข้อมูล', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+        await executeCheckin(lat, lng);
+
+    } catch (error) {
+        Swal.fire("ข้อผิดพลาด", error.message, "error");
+    }
+}
+
+async function executeCheckin(lat, lng) {
+    let inRange = false;
+    let nearestDistance = Infinity;
+    let targetLocationName = "ไม่ทราบสถานที่";
+
+    for (const loc of TARGET_LOCATIONS) {
+        const distance = calculateDistance(lat, lng, loc.lat, loc.lng);
+        if (distance < nearestDistance) nearestDistance = distance;
+        if (distance <= loc.range) {
+            inRange = true;
+            targetLocationName = loc.name;
+            break;
+        }
+    }
+
+    if (!inRange) {
+        return Swal.fire({ icon: "error", title: "อยู่นอกพื้นที่!", text: `คุณอยู่ห่างจากจุดลงเวลาที่ใกล้ที่สุด ${nearestDistance.toFixed(0)} เมตร`, confirmButtonColor: localStorage.getItem('appThemeColor') || "#0f766e" });
+    }
+
+    try {
+        const capturedImageBase64 = captureOptimizedFrame('chk').split(",")[1];
+        const jobType = document.getElementById('chk-job').value;
         const note = document.getElementById('chk-note').value;
         const now = new Date();
 
@@ -551,65 +543,63 @@ async function executeCheckin(lat, lng) {
             user: currentUserId
         };
 
-        logDebug(`▶️ [3/3] กำลังอัปโหลดข้อมูลไปยังฐานข้อมูล...`);
-
         const response = await fetch(CONFIG.WEB_APP_API, { method: "POST", body: JSON.stringify(payload) });
+        if (!response.ok) throw new Error("เครือข่ายขัดข้อง");
 
-        if (!response.ok) {
-            logDebug(`❌ Server Error (รหัส: ${response.status})`, "error");
-            throw new Error("เซิร์ฟเวอร์ฐานข้อมูลไม่ตอบสนอง");
-        }
-
-        logDebug(`✅ บันทึกเวลาสำเร็จ!`, "success");
         Swal.fire("สำเร็จ!", "บันทึกเวลาเรียบร้อยแล้ว", "success").then(() => sendFlexMessage(payload));
 
     } catch (e) {
-        logDebug(`❌ ขัดข้อง: ${e.message}`, "error");
-        Swal.fire("ข้อผิดพลาด", e.message, "error");
+        Swal.fire("ข้อผิดพลาด", "ไม่สามารถถ่ายภาพหรือเชื่อมต่อฐานข้อมูลได้", "warning");
     }
 }
 
 // ==========================================
 // 🗺️ 5. MAP MODAL (LEAFLET) 
 // ==========================================
-function openMapModal() {
+async function openMapModal() {
     document.getElementById('mapModal').classList.remove('hidden');
-
     setTimeout(() => {
         document.getElementById('mapModal').classList.remove('opacity-0');
         document.getElementById('mapModalContent').classList.remove('translate-y-full');
     }, 10);
 
-    Swal.fire({ title: 'กำลังค้นหาพิกัด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+        Swal.fire({ title: 'กำลังค้นหาพิกัด...', text: 'รอสักครู่...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-    navigator.geolocation.getCurrentPosition(
-        (pos) => {
-            Swal.close();
-            const userLat = pos.coords.latitude;
-            const userLng = pos.coords.longitude;
+        let lat, lng;
+        if (cachedLocation) {
+            lat = cachedLocation.latitude;
+            lng = cachedLocation.longitude;
+        } else {
+            const coords = await getGPSLocation();
+            lat = coords.lat;
+            lng = coords.lng;
+            cachedLocation = { coords: { latitude: lat, longitude: lng } };
+        }
 
-            let nearestDistance = Infinity;
-            let nearestRange = 30;
+        Swal.close();
 
-            for (const loc of TARGET_LOCATIONS) {
-                const dist = calculateDistance(userLat, userLng, loc.lat, loc.lng);
-                if (dist < nearestDistance) {
-                    nearestDistance = dist;
-                    nearestRange = loc.range;
-                }
+        let nearestDistance = Infinity;
+        let nearestRange = 30;
+
+        for (const loc of TARGET_LOCATIONS) {
+            const dist = calculateDistance(lat, lng, loc.lat, loc.lng);
+            if (dist < nearestDistance) {
+                nearestDistance = dist;
+                nearestRange = loc.range;
             }
+        }
 
-            let distText = nearestDistance <= nearestRange
-                ? `<span class="text-emerald-600">อยู่ในระยะ (${nearestDistance.toFixed(0)} ม.)</span>`
-                : `<span class="text-rose-600">อยู่นอกระยะ (${nearestDistance.toFixed(0)} ม.)</span>`;
-            document.getElementById('mapDistanceText').innerHTML = `ระยะห่างจากจุดใกล้สุด: ${distText}`;
+        let distText = nearestDistance <= nearestRange
+            ? `<span class="text-emerald-600">อยู่ในระยะ (${nearestDistance.toFixed(0)} ม.)</span>`
+            : `<span class="text-rose-600">อยู่นอกระยะ (${nearestDistance.toFixed(0)} ม.)</span>`;
+        document.getElementById('mapDistanceText').innerHTML = `ระยะห่างจากจุดใกล้สุด: ${distText}`;
 
-            initOrUpdateMap(userLat, userLng);
-        },
-        (err) => {
-            Swal.fire("ข้อผิดพลาด", "กรุณาเปิด GPS และอนุญาตการเข้าถึง", "error");
-        }, { enableHighAccuracy: true }
-    );
+        initOrUpdateMap(lat, lng);
+
+    } catch (error) {
+        Swal.fire("ข้อผิดพลาด", error.message, "error");
+    }
 }
 
 function initOrUpdateMap(userLat, userLng) {
