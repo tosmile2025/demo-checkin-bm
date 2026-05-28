@@ -2,6 +2,8 @@
 // 🏥 MEDICAL TIME ATTENDANCE SYSTEM (SPA)
 // ==========================================
 
+const DEFAULT_AVATAR = "https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/No-Image-Placeholder.svg/330px-No-Image-Placeholder.svg.png";
+
 let TARGET_LOCATIONS = [{
     id: 'default',
     name: 'จุดเริ่มต้น',
@@ -152,7 +154,7 @@ async function fetchRolesSettings() {
             deptSelect.appendChild(option);
         });
     } catch (error) {
-        deptSelect.innerHTML = '<option value="" disabled selected>-- ❌ โหลดข้อมูลล้มเหลว --</option>';
+        deptSelect.innerHTML = '<option value="" disabled selected>-- ❌ โหลดข้อมูลตำแหน่งล้มเหลว --</option>';
     }
 }
 
@@ -364,14 +366,18 @@ function submitRegistration() {
 }
 
 // ==========================================
-// 📍 4. FAST GPS & CHECK-IN LOGIC (ป้องกันการหมุนค้าง 100%)
+// 📍 4. FAST GPS & CHECK-IN LOGIC 
 // ==========================================
 function setupCheckinView() {
     document.getElementById('chk-name').textContent = currentUserData[2];
     document.getElementById('chk-details').textContent = `รหัส: ${currentUserData[3]} | ${currentUserData[4]}`;
 
-    if (currentUserData[5] && currentUserData[5].startsWith('http')) {
-        document.getElementById('chk-profile-img').src = currentUserData[5];
+    // 🌟 แก้ไข Bug 1: ใช้รูปสำรองกรณีโรงพยาบาลบล็อก via.placeholder.com
+    const profileImageUrl = currentUserData[5];
+    if (profileImageUrl && profileImageUrl.startsWith('http') && !profileImageUrl.includes('placeholder.com')) {
+        document.getElementById('chk-profile-img').src = profileImageUrl;
+    } else {
+        document.getElementById('chk-profile-img').src = DEFAULT_AVATAR;
     }
 
     startCamera('chk');
@@ -410,30 +416,64 @@ function populateJobDropdown() {
     }
 }
 
+// 🌟 แก้ไข: ฟังก์ชันควบคุมสีปุ่มหมุด (Dynamic Indicator)
+function updateGpsIndicatorColor(state) {
+    const btn = document.querySelector('[onclick="openMapModal()"]');
+    if (!btn) return;
+
+    const dot = btn.querySelector('.rounded-full.animate-pulse');
+    const icon = btn.querySelector('.fa-map-marker-alt');
+
+    if (dot && icon) {
+        // เขียว = ในพื้นที่, แดง = นอกพื้นที่, ส้ม = กำลังหาคลื่น
+        const dotColor = state === 'in_range' ? 'bg-emerald-400' : state === 'out_range' ? 'bg-rose-500' : 'bg-amber-400';
+        const iconColor = state === 'in_range' ? 'text-emerald-400' : state === 'out_range' ? 'text-rose-500' : 'text-amber-400';
+
+        dot.className = `w-2 h-2 rounded-full animate-pulse ${dotColor}`;
+        icon.className = `fas fa-map-marker-alt mr-1 ${iconColor}`;
+    }
+}
+
 function startBackgroundGPS() {
+    updateGpsIndicatorColor('searching'); // เริ่มหาสัญญาณให้เป็นสีส้ม
+
     if (navigator.geolocation) {
         watchId = navigator.geolocation.watchPosition(
-            (pos) => { cachedLocation = pos.coords; },
-            (err) => { console.warn("GPS Pre-fetch failed", err); },
-            { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+            (pos) => {
+                cachedLocation = pos.coords;
+
+                // คำนวณเพื่ออัปเดตสีหมุดทันที
+                let inRange = false;
+                for (const loc of TARGET_LOCATIONS) {
+                    if (calculateDistance(pos.coords.latitude, pos.coords.longitude, loc.lat, loc.lng) <= loc.range) {
+                        inRange = true; break;
+                    }
+                }
+                updateGpsIndicatorColor(inRange ? 'in_range' : 'out_range');
+            },
+            (err) => {
+                console.warn("GPS Pre-fetch failed", err);
+                updateGpsIndicatorColor('searching');
+            },
+            { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
         );
     }
 }
 
-// 🌟 ฟังก์ชันหลักสำหรับดึง GPS (แก้ไขให้ไม่ให้เกิดการค้าง)
+// 🌟 แก้ไข Bug 2: ขยายเวลาดักค้างเป็น 25 วินาที เพื่อให้มีเวลากด "อนุญาตสิทธิ์ Location"
 function getGPSLocation() {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) return reject(new Error("บราวเซอร์ของคุณไม่รองรับระบบ GPS"));
 
         let isResolved = false;
 
-        // ตัวตั้งเวลาตัดจบ 10 วินาที ป้องกันการค้างตลอดกาล
+        // ตัวตั้งเวลาตัดจบขยายเป็น 25 วินาที เผื่อผู้ใช้เสียเวลากดอนุญาต
         const fallbackTimer = setTimeout(() => {
             if (!isResolved) {
                 isResolved = true;
-                reject(new Error("สัญญาณ GPS ขัดข้อง หรือใช้เวลาหาพิกัดนานเกินไป"));
+                reject(new Error("สัญญาณ GPS ขัดข้อง หรือยังไม่ได้อนุญาตสิทธิ์ Location"));
             }
-        }, 10000);
+        }, 25000);
 
         try {
             navigator.geolocation.getCurrentPosition(
@@ -448,12 +488,13 @@ function getGPSLocation() {
                     isResolved = true;
                     clearTimeout(fallbackTimer);
                     let errMsg = "ไม่ทราบสาเหตุ";
-                    if (err.code === 1) errMsg = "ถูกปฏิเสธสิทธิ์ (โปรดอนุญาตสิทธิ์ Location)";
+                    if (err.code === 1) errMsg = "ถูกปฏิเสธสิทธิ์ (โปรดอนุญาตสิทธิ์ Location ให้แอป LINE)";
                     if (err.code === 2) errMsg = "หาพิกัดไม่ได้ (สัญญาณขาดหาย)";
                     if (err.code === 3) errMsg = "หมดเวลาในการค้นหา (Timeout)";
                     reject(new Error(errMsg));
                 },
-                { enableHighAccuracy: true, timeout: 9000, maximumAge: 0 }
+                // ขยาย Timeout ของตัวดึงพิกัดตามไปด้วย
+                { enableHighAccuracy: true, timeout: 24000, maximumAge: 0 }
             );
         } catch (e) {
             if (isResolved) return;
@@ -472,7 +513,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// 🌟 ระบบบันทึกที่อัปเดตข้อความชัดเจน
 async function processOneClickCheckin() {
     try {
         const jobSelect = document.getElementById('chk-job');
@@ -480,7 +520,6 @@ async function processOneClickCheckin() {
             return Swal.fire("แจ้งเตือน", "กรุณาเลือกประเภทการลงเวลาก่อนครับ", "warning");
         }
 
-        // เริ่มโหลด
         Swal.fire({ title: 'กำลังตรวจสอบพิกัด...', text: 'รอสักครู่...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
         let lat, lng;
@@ -491,10 +530,9 @@ async function processOneClickCheckin() {
             const coords = await getGPSLocation();
             lat = coords.lat;
             lng = coords.lng;
-            cachedLocation = { coords: { latitude: lat, longitude: lng } }; // อัปเดตแคช
+            cachedLocation = { coords: { latitude: lat, longitude: lng } };
         }
 
-        // เปลี่ยนข้อความบนจอ เพื่อให้รู้ว่ากำลังทำขั้นตอนต่อไป ไม่ได้ค้างที่ GPS
         Swal.fire({ title: 'กำลังบันทึกข้อมูล...', text: 'กำลังเชื่อมต่อฐานข้อมูล', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
         await executeCheckin(lat, lng);
